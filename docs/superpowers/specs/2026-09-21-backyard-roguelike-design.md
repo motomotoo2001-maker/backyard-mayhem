@@ -39,7 +39,7 @@ It must contain:
 - game-over and restart;
 - production-quality sprites, animation, VFX and UI for all core objects.
 
-The milestone is not complete merely because it launches. It must meet the acceptance criteria in section 16.
+The milestone is not complete merely because it launches. It must meet the acceptance criteria in section 23.
 
 ## 3. Explicit Non-Goals for the Vertical Slice
 
