@@ -4,7 +4,7 @@
 
 **Goal:** Build a polished five-wave playable vertical slice of Backyard Mayhem in Godot 4.7.2, using the supplied concept art and sprite-sheet archive, with one hero, Flip-Flop Launcher, three enemy archetypes, a Water Turret, a defended base, XP/coin progression, three-card upgrades, one mini-boss, HUD, save/settings support, and repeatable headless/gameplay/visual QA.
 
-**Architecture:** Use editable 2D/2.5D Godot scenes with component-oriented GDScript, data stored in typed `Resource` classes, signals for cross-system events, and a strict separation between gameplay state, presentation, and authored data. Every task leaves the project runnable and adds a headless test or smoke scenario before the next subsystem depends on it.
+**Architecture:** Use editable 2D/2.5D Godot scenes with component-oriented GDScript, typed `Resource` data, signals for cross-system events, and a strict separation between gameplay state, presentation, and authored data. Every task leaves the project runnable and adds a headless test or smoke scenario before the next subsystem depends on it.
 
 **Tech Stack:** Godot 4.7.2, GDScript, Godot `Resource` data, `CharacterBody2D`, `Area2D`, `AnimatedSprite2D`, `AnimationPlayer`, built-in `Image` processing for asset preparation, Git/GitHub.
 
@@ -15,14 +15,14 @@
 - Engine is Godot 4.7.2.
 - Gameplay code is GDScript.
 - Runtime presentation is true 2D/2.5D; do not convert the game into a fully 3D project.
-- Core runtime objects must remain editable Godot scenes; do not bake the playable yard into one screenshot.
-- Use `CharacterBody2D.velocity` plus `move_and_slide()` for moving actors.
-- Cross-system integration uses signals and explicit references; do not introduce deep `get_node("../../../../...")` gameplay dependencies.
+- Core runtime objects remain editable Godot scenes; do not bake the playable yard into one screenshot.
+- Moving actors use `CharacterBody2D.velocity` plus `move_and_slide()`.
+- Cross-system integration uses signals and explicit references; no deep `get_node("../../../../...")` gameplay dependencies.
 - Balance values live in typed `Resource` data wherever practical.
 - Every weapon and turret uses an explicit `MuzzlePoint` for projectile spawning.
-- Final vertical slice contains no crude placeholder circles/capsules/gray boxes for core characters, enemies, base, weapon, Water Turret, or primary UI.
-- Preserve original uploaded/source artwork under a source-art directory; generated runtime frames must be derivative outputs, never destructive edits of source files.
-- The game must pause combat safely during upgrade selection.
+- Final vertical slice contains no crude placeholder geometry for core characters, enemies, base, weapon, Water Turret, or primary UI.
+- Preserve original uploaded/source artwork under `assets/source/`; generated runtime frames are derivative outputs, never destructive edits of source files.
+- Combat pauses safely during upgrade selection.
 - Base HP reaching zero ends the run; player HP reaching zero temporarily incapacitates and later revives the player.
 - Target is 60 FPS with roughly 100 active regular enemies on the target PC class.
 - Mid-run save/resume, multiplayer, large campaign, freeform manual tower placement, and full meta-progression are outside this milestone.
@@ -30,16 +30,14 @@
 ## Review Focus
 
 1. **Stale or deleted targets:** weapons and turrets must not crash or fire toward freed enemies; tests verify target invalidation before fire.
-2. **Duplicate level-up application:** opening/closing the upgrade overlay must apply exactly one selected upgrade and resume exactly once.
-3. **Corrupt/missing save fields:** startup must recover to defaults instead of failing.
-4. **Projectile origin/facing drift:** tests assert spawned projectile global position equals the active `MuzzlePoint` transform within tolerance, and visual QA checks the sprite aligns with that origin.
-5. **Wave completion edge cases:** waves must complete only when budget/spawning is exhausted and required live enemies/bosses are cleared; tests cover a boss surviving after the spawn budget is spent.
+2. **Duplicate level-up application:** upgrade overlay applies exactly one selected upgrade and resumes combat exactly once.
+3. **Corrupt/missing save fields:** startup recovers to defaults instead of failing.
+4. **Projectile origin/facing drift:** tests assert spawned projectile global position equals the active `MuzzlePoint` transform within tolerance; visual QA verifies sprite alignment.
+5. **Wave completion edge cases:** waves complete only when spawning is exhausted and required live enemies/bosses are cleared; tests cover a boss surviving after the spawn budget is spent.
 
 ---
 
 ## File Map
-
-The implementation creates this stable structure. Additional imported `.png`, `.tres`, and `.res` files may appear under the named asset/data folders, but gameplay responsibilities stay within these paths.
 
 ```text
 project.godot
@@ -53,7 +51,9 @@ tools/
 tests/
   run_all.gd
   test_utils.gd
+  test_data_resources.gd
   test_health_component.gd
+  test_player_movement.gd
   test_projectile_weapon.gd
   test_enemy_ai.gd
   test_upgrade_system.gd
@@ -61,6 +61,7 @@ tests/
   test_wave_director.gd
   test_game_flow.gd
   test_save_service.gd
+  perf_enemy_swarm.gd
 
 assets/
   source/
@@ -125,6 +126,9 @@ scripts/ui/
   between_wave_shop.gd
   game_over_screen.gd
 
+scripts/levels/
+  backyard_controller.gd
+
 scenes/player/player.tscn
 scenes/weapons/flip_flop_projectile.tscn
 scenes/weapons/flip_flop_launcher.tscn
@@ -148,8 +152,19 @@ data/enemies/raccoon.tres
 data/enemies/neighbor_kid.tres
 data/enemies/big_neighbor.tres
 data/enemies/miniboss.tres
-data/upgrades/*.tres
-data/waves/wave_01.tres ... wave_05.tres
+data/upgrades/double_trouble.tres
+data/upgrades/angry_flip_flop.tres
+data/upgrades/garden_pressure.tres
+data/base_upgrades/unlock_water_turret.tres
+data/base_upgrades/reinforced_walls.tres
+data/base_upgrades/turret_pressure.tres
+data/waves/wave_01.tres
+data/waves/wave_02.tres
+data/waves/wave_03.tres
+data/waves/wave_04.tres
+data/waves/wave_05.tres
+
+docs/qa/vertical-slice-checklist.md
 ```
 
 ---
@@ -164,14 +179,14 @@ data/waves/wave_01.tres ... wave_05.tres
 - Create: `tests/test_utils.gd`
 
 **Interfaces:**
-- Produces: `tests/run_all.gd` executable via Godot `--headless --script`; assertion helpers `TestUtils.assert_true(condition, message)`, `assert_eq(actual, expected, message)`, `assert_near(actual, expected, epsilon, message)`.
-- Consumes: provided Godot 4.7.2 Linux binary during execution; the binary itself is not committed.
+- Produces: `tests/run_all.gd` executable with Godot `--headless --script`; `TestUtils.assert_true`, `assert_eq`, `assert_near`.
+- Consumes: the provided Godot 4.7.2 Linux binary during execution; the binary itself is not committed.
 
-- [ ] **Step 1: Create the minimal project configuration and input map**
+- [ ] **Step 1: Create minimal project configuration and exact input actions**
 
-`project.godot` must define the main scene later at `res://scenes/levels/backyard.tscn`, window size 1280×720, stretch mode `canvas_items`, and input actions `move_left`, `move_right`, `move_up`, `move_down`, `fire`, `pause`.
+Set main scene to `res://scenes/levels/backyard.tscn`, viewport 1280×720, stretch mode `canvas_items`, and GL compatibility renderer. Define `move_left=A`, `move_right=D`, `move_up=W`, `move_down=S`, `fire=Mouse Button Left`, `pause=Escape` in `project.godot` so no editor setup is required.
 
-Use this initial project header:
+Initial header:
 
 ```ini
 [application]
@@ -188,9 +203,7 @@ renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 ```
 
-Add the six input actions through `InputEventKey` entries so keyboard movement works without editor setup.
-
-- [ ] **Step 2: Create a dependency-free headless test harness**
+- [ ] **Step 2: Create dependency-free headless assertions**
 
 `tests/test_utils.gd`:
 
@@ -216,11 +229,9 @@ static func assert_near(actual: float, expected: float, epsilon: float, message:
         failures.append("%s | actual=%f expected=%f" % [message, actual, expected])
 ```
 
-`tests/run_all.gd` extends `SceneTree`, loads every `res://tests/test_*.gd` except `test_utils.gd`, awaits `run()` when needed, prints failures, and exits with code `1` on any failure and `0` otherwise.
+`tests/run_all.gd` extends `SceneTree`, enumerates `res://tests/test_*.gd` except `test_utils.gd`, instantiates each script, awaits `run()` when it returns a signal/coroutine, prints every failure, and exits `1` on any failure and `0` otherwise.
 
 - [ ] **Step 3: Run the empty harness**
-
-Run:
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
@@ -240,7 +251,7 @@ Expected: exit code `0`, summary `0 failures`.
 .DS_Store
 ```
 
-`README.md` must document the exact Godot version, the headless test command, and that source sprite sheets live in `assets/source/` while runtime-ready frames live in derived asset folders.
+`README.md` documents Godot 4.7.2, the headless test command, and the source/derived asset split.
 
 - [ ] **Step 5: Commit**
 
@@ -256,71 +267,59 @@ git commit -m "chore: bootstrap Godot project and test harness"
 **Files:**
 - Create: `tools/process_sprite_sheets.gd`
 - Create: `tools/asset_manifest.json`
-- Create directories: `assets/source/`, `assets/characters/`, `assets/enemies/`, `assets/weapons/`, `assets/defenses/`, `assets/environment/`, `assets/ui/`, `assets/vfx/`
-- Populate: derived PNG frames from the supplied asset archive
+- Create/populate: `assets/source/`, `assets/characters/`, `assets/enemies/`, `assets/weapons/`, `assets/defenses/`, `assets/environment/`, `assets/ui/`, `assets/vfx/`
+- Create: `assets/source/SOURCE_HASHES.txt`
+- Create: `assets/processing_report.json`
 
 **Interfaces:**
 - Consumes: PNG source sheets extracted from the supplied archive into `assets/source/`.
-- Produces: transparent, padded, anchor-stable PNG frame sequences plus a generated report `assets/processing_report.json`.
+- Produces: transparent, padded, anchor-stable PNG frame sequences and processing metadata.
 
-- [ ] **Step 1: Extract source archive without modifying its files**
+- [ ] **Step 1: Extract source archive without modifying source bytes**
 
-Extract the user-supplied archive so each original PNG is preserved byte-for-byte under `assets/source/`. Record SHA-256 hashes in `assets/source/SOURCE_HASHES.txt` using:
+Extract every original PNG under `assets/source/`; preserve the exact original filename. Record SHA-256 hashes:
 
 ```bash
 find assets/source -type f -iname '*.png' -print0 | sort -z | xargs -0 sha256sum > assets/source/SOURCE_HASHES.txt
 ```
 
-- [ ] **Step 2: Write a manifest format that never depends on hard-coded editor import regions**
+- [ ] **Step 2: Build the manifest from discovered exact filenames**
 
-`tools/asset_manifest.json` uses one entry per sheet with:
+`tools/process_sprite_sheets.gd -- --index-only` scans `assets/source/` with `DirAccess`, sorts filenames deterministically, classifies known sheets by lowercase keyword rules (`hero`, `raccoon`, `neighbor`, `turret`, `water`, `flip`, `upgrade`, `yard/backyard`), and writes `tools/asset_manifest.json`. Unclassified files are written with category `review_required` and cause index mode to exit `2`, forcing explicit classification before processing.
 
-```json
-{
-  "source": "assets/source/<actual-file-name>.png",
-  "output_dir": "assets/defenses/water_turret",
-  "prefix": "water_turret",
-  "min_component_area": 1200,
-  "white_threshold": 245,
-  "padding": 16,
-  "anchor": "bottom_center"
-}
-```
+Each resolved manifest entry contains exact `source`, `output_dir`, `prefix`, `min_component_area`, `white_threshold`, `padding`, and `anchor`. No manual crop rectangles are stored.
 
-During execution, populate `source` entries from the actual extracted filenames. The processing algorithm, not manual crop coordinates, determines component bounds.
+- [ ] **Step 3: Implement background removal and connected-component extraction with Godot `Image`**
 
-- [ ] **Step 3: Implement background removal and component extraction using Godot `Image`**
+For each manifest entry:
 
-`tools/process_sprite_sheets.gd` must:
-
-1. load each PNG with `Image.load_from_file()`;
-2. convert near-white pixels where `r`, `g`, and `b` are all at least `white_threshold / 255.0` to alpha `0`;
-3. flood-fill 4-connected non-transparent components;
+1. load with `Image.load_from_file()`;
+2. convert pixels with R/G/B each >= `white_threshold / 255.0` to alpha 0;
+3. flood-fill 4-connected nontransparent components;
 4. discard components below `min_component_area`;
-5. sort components top-to-bottom then left-to-right by bounding-box center;
-6. crop each component with padding;
-7. normalize all frames from the same sheet to the maximum width/height of that sheet;
-8. place each crop using the requested `bottom_center` anchor;
-9. save `prefix_000.png`, `prefix_001.png`, ...;
-10. write frame bounds, output dimensions and warnings to `assets/processing_report.json`.
+5. sort remaining components top-to-bottom then left-to-right by center;
+6. crop with configured padding;
+7. normalize all frames in that sheet to the sheet maximum width/height;
+8. place using `bottom_center` anchor;
+9. save `prefix_000.png`, `prefix_001.png`, etc.;
+10. write bounds/dimensions/warnings to `assets/processing_report.json`.
 
-The script exits non-zero when no usable component is found for a manifest entry.
+Exit non-zero if any classified sheet produces zero usable frames.
 
-- [ ] **Step 4: Run processing and inspect generated frames**
-
-Run:
+- [ ] **Step 4: Run indexing then processing**
 
 ```bash
-$GODOT_BIN --headless --path . --script res://tools/process_sprite_sheets.gd
+$GODOT_BIN --headless --path . --script res://tools/process_sprite_sheets.gd -- --index-only
+$GODOT_BIN --headless --path . --script res://tools/process_sprite_sheets.gd -- --process
 ```
 
-Expected: no white background, no label text retained as a large component, stable frame canvas dimensions per animation set.
+Expected: all required core categories classified, no white background, stable frame canvas dimensions per animation set.
 
-- [ ] **Step 5: Perform visual QA before gameplay integration**
+- [ ] **Step 5: Visual QA generated hero/enemy/weapon/turret/VFX/UI frames**
 
-Open generated frames for the hero, raccoon, Neighbor Kid, Big Neighbor, Water Turret, water projectile/splash, Flip-Flop Launcher and upgrade UI. Reject/reprocess any set with visible white halos, cropped limbs, inconsistent ground anchors, or text fragments.
+Reject and reprocess any set with white halos, cropped limbs, text fragments, inconsistent ground anchor, or obvious frame ordering mistakes.
 
-- [ ] **Step 6: Commit source provenance, processor, manifest and approved derived frames**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add tools assets
@@ -341,9 +340,10 @@ git commit -m "art: ingest and normalize supplied sprite assets"
 - Create: `data/enemies/raccoon.tres`
 - Create: `data/enemies/neighbor_kid.tres`
 - Create: `data/enemies/big_neighbor.tres`
+- Create: `tests/test_data_resources.gd`
 
 **Interfaces:**
-- Produces: `WeaponData`, `EnemyData`, `UpgradeData`, `WaveData`, `BaseUpgradeData` typed resources used by all later systems.
+- Produces: typed `WeaponData`, `EnemyData`, `UpgradeData`, `WaveData`, `BaseUpgradeData`.
 
 - [ ] **Step 1: Define `WeaponData`**
 
@@ -362,21 +362,17 @@ extends Resource
 @export var projectile_scale: float = 1.0
 ```
 
-- [ ] **Step 2: Define enemy/wave/upgrade/base resource contracts**
+- [ ] **Step 2: Define other resource contracts**
 
-`EnemyData` exposes `max_health`, `move_speed`, `contact_damage`, `threat_cost`, `coin_drop`, `xp_drop`, `target_priority`.
+`EnemyData`: `max_health`, `move_speed`, `contact_damage`, `threat_cost`, `coin_drop`, `xp_drop`, `target_priority`.
 
-`UpgradeData` exposes `id`, `title`, `description`, `icon`, `rarity`, `tags`, `max_level`, `effect_key`, `magnitude`.
+`UpgradeData`: `id`, `title`, `description`, `icon`, `rarity`, `tags`, `max_level`, `effect_key`, `magnitude`.
 
-`WaveData` exposes `wave_index`, `threat_budget`, `spawn_interval`, `enemy_pool: Array[EnemyData]`, `elite_chance`, `boss_scene`.
+`WaveData`: `wave_index`, `threat_budget`, `spawn_interval`, `enemy_pool: Array[EnemyData]`, `elite_chance`, `boss_scene`.
 
-`BaseUpgradeData` exposes `id`, `title`, `cost`, `max_level`, `effect_key`, `magnitude`.
+`BaseUpgradeData`: `id`, `title`, `cost`, `max_level`, `effect_key`, `magnitude`.
 
-Use typed exports and safe defaults; IDs default to empty string and are validated before use.
-
-- [ ] **Step 3: Create first balancing resources**
-
-Initial values:
+- [ ] **Step 3: Author initial balance resources**
 
 ```text
 Raccoon:      HP 24, speed 165, contact 8, threat 1, XP 3, coins 1
@@ -384,17 +380,20 @@ Neighbor Kid: HP 55, speed 105, contact 10, threat 3, XP 7, coins 2
 Big Neighbor: HP 180, speed 58, contact 22, threat 7, XP 16, coins 5
 ```
 
-Flip-Flop Launcher uses the defaults shown in `WeaponData`.
+Flip-Flop Launcher uses the `WeaponData` defaults above.
 
-- [ ] **Step 4: Add a resource-load smoke test to `tests/run_all.gd` or a dedicated `test_data_resources.gd`**
+- [ ] **Step 4: Write and run `test_data_resources.gd`**
 
-Assert every `.tres` loads, values are positive where required, and `threat_cost >= 1`.
-
-- [ ] **Step 5: Run tests and commit**
+Assert each `.tres` loads, positive values are positive, threat cost is at least 1, and invalid empty IDs are rejected by validation helpers.
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
-git add scripts/data data tests
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/data data tests/test_data_resources.gd
 git commit -m "feat: add typed gameplay data resources"
 ```
 
@@ -409,13 +408,9 @@ git commit -m "feat: add typed gameplay data resources"
 - Create: `tests/test_health_component.gd`
 
 **Interfaces:**
-- Produces: `HealthComponent.damage(amount, source := null)`, `heal(amount)`, signals `health_changed(current, maximum)`, `died(source)`; `HurtboxComponent.receive_hit(amount, knockback, source)`.
+- Produces: `HealthComponent.damage(amount, source := null)`, `heal(amount)`, `reset()`, signals `health_changed(current, maximum)`, `died(source)`; `HurtboxComponent.receive_hit(amount, knockback, source)`.
 
-- [ ] **Step 1: Write failing health tests**
-
-Tests must cover damage clamping, healing clamping, a single `died` emission, and ignoring damage after death.
-
-Example assertion:
+- [ ] **Step 1: Write failing tests** for damage clamping, healing clamping, one `died` emission, and damage ignored after death.
 
 ```gdscript
 var health := HealthComponent.new()
@@ -425,21 +420,17 @@ health.damage(35.0)
 TestUtils.assert_near(health.current_health, 65.0, 0.001, "damage reduces health")
 ```
 
-- [ ] **Step 2: Run and verify failure because classes do not exist**
+- [ ] **Step 2: Run and confirm expected failure**
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
 ```
 
-Expected: non-zero exit mentioning missing `HealthComponent`.
-
-- [ ] **Step 3: Implement `HealthComponent`**
-
-Use a `Node` with exported `max_health`, runtime `current_health`, explicit `reset()`, and an internal dead flag. Emit `died` once when health crosses zero.
+- [ ] **Step 3: Implement `HealthComponent`** as a `Node` with exported `max_health`, runtime `current_health`, explicit `reset()`, internal dead flag, and a one-shot death signal.
 
 - [ ] **Step 4: Implement hurtbox/damage bridge**
 
-`HurtboxComponent` stores an exported `HealthComponent` reference and forwards validated positive damage. `DamageComponent` stores contact damage and a cooldown accumulator so sustained overlap cannot damage every physics tick.
+`HurtboxComponent` forwards validated positive damage to an exported `HealthComponent`. `DamageComponent` stores contact damage and a cooldown accumulator so sustained overlap cannot damage every physics tick.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -462,15 +453,11 @@ git commit -m "feat: add reusable combat health components"
 
 **Interfaces:**
 - Produces: `AimController.get_aim_direction() -> Vector2`, `AimController.get_target() -> Node2D`, `Player.set_controls_enabled(enabled: bool)`.
-- Consumes: `HealthComponent`, player runtime animation assets.
+- Consumes: `HealthComponent` and processed player animation assets.
 
-- [ ] **Step 1: Write movement/aim tests**
+- [ ] **Step 1: Write tests** for normalized diagonal input, controls disabled => zero velocity, explicit aim priority, and freed auto-target => null/reacquire without invalid access.
 
-Test normalized diagonal input, disabled controls producing zero velocity, explicit aim direction taking priority, and auto-target returning `null` when all candidates are freed.
-
-- [ ] **Step 2: Implement movement using Godot 4.7 conventions**
-
-Core logic:
+- [ ] **Step 2: Implement movement**
 
 ```gdscript
 var input_dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -478,17 +465,17 @@ body.velocity = input_dir * move_speed
 body.move_and_slide()
 ```
 
-Movement component receives its owning `CharacterBody2D`; it must not search the scene tree every frame.
+The component receives its owning `CharacterBody2D`; no scene-tree search every frame.
 
 - [ ] **Step 3: Implement hybrid aim controller**
 
-Mouse/global cursor direction is explicit aim when sufficiently displaced from player center. Otherwise choose the nearest valid enemy from a cached candidate list maintained by an `Area2D` detection region. Validate targets with `is_instance_valid()` immediately before returning them.
+Mouse/global cursor direction wins when explicit aim is present. Otherwise select nearest valid candidate from a cached `Area2D` candidate set. Validate with `is_instance_valid()` immediately before returning a target.
 
 - [ ] **Step 4: Assemble `player.tscn`**
 
 Root `CharacterBody2D` children: `VisualRoot`, `AnimatedSprite2D`, `Shadow`, `CollisionShape2D`, `HealthComponent`, `Hurtbox`, `AimArea`, `AimController`, `WeaponMount`, `PickupArea`.
 
-- [ ] **Step 5: Run tests and headless scene-load check**
+- [ ] **Step 5: Run tests and scene-load check**
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
@@ -515,30 +502,24 @@ git commit -m "feat: add player movement and hybrid aiming"
 - Create: `tests/test_projectile_weapon.gd`
 
 **Interfaces:**
-- Produces: `Projectile.launch(origin: Vector2, direction: Vector2, speed: float, damage: float, pierce: int, knockback: float)`; `WeaponController.try_fire()`; signal `shot_fired(projectile)`.
+- Produces: `Projectile.launch(origin, direction, speed, damage, pierce, knockback)`, `WeaponController.try_fire()`, signal `shot_fired(projectile)`.
 - Consumes: `WeaponData`, `AimController`, `MuzzlePoint`.
 
-- [ ] **Step 1: Write failing tests for muzzle origin, cadence and stale target handling**
+- [ ] **Step 1: Write failing tests** for exact muzzle origin, fire cadence, symmetric spread, and stale target handling.
 
-Build a weapon test scene in memory with a `Marker2D` at `(32, -8)`. After `try_fire()`, assert projectile global position matches the marker within `0.01`. Free the selected target before a second shot and assert no crash occurs and fallback aim remains finite.
+Create a test weapon root with `Marker2D` at `(32, -8)`; after `try_fire()`, projectile global position must match within `0.01`.
 
-- [ ] **Step 2: Implement projectile motion and hit contract**
+- [ ] **Step 2: Implement projectile motion/hit**
 
-Projectile is an `Area2D`; `_physics_process(delta)` advances `global_position += direction * speed * delta`. On compatible hurtbox overlap it calls `receive_hit`, decrements pierce, and queues free when exhausted. Reject zero-length launch directions.
+Projectile is an `Area2D`; `_physics_process(delta)` advances `global_position += direction * speed * delta`. Compatible hurtbox overlap applies damage/knockback, decrements pierce, and frees when exhausted. Zero-length launch direction is rejected.
 
-- [ ] **Step 3: Implement fire cadence from `WeaponData.fire_rate`**
+- [ ] **Step 3: Implement fire cadence** using a float accumulator: interval `1.0 / maxf(data.fire_rate, 0.01)`.
 
-Use an accumulator/cooldown float, not a `Timer` node per projectile. Compute interval as `1.0 / maxf(data.fire_rate, 0.01)`.
+- [ ] **Step 4: Spawn every projectile from `MuzzlePoint.global_position`** and distribute multi-projectile spread symmetrically around aim angle.
 
-- [ ] **Step 4: Spawn every projectile from `MuzzlePoint.global_position`**
+- [ ] **Step 5: Add Flip-Flop presentation** using processed art; rotate/tumble sprite while collision remains independent.
 
-For multi-projectile fire, distribute spread symmetrically around the aim angle. Do not offset from the player root.
-
-- [ ] **Step 5: Add Flip-Flop presentation**
-
-Use the approved processed flip-flop art, rotate the projectile sprite along velocity, and add a subtle rotation animation while travelling. Keep gameplay collision independent of sprite dimensions.
-
-- [ ] **Step 6: Run tests, visually fire at a stationary dummy, commit**
+- [ ] **Step 6: Test, visually fire at a stationary dummy, commit**
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
@@ -565,29 +546,21 @@ git commit -m "feat: add Flip-Flop Launcher and projectile combat"
 
 **Interfaces:**
 - Produces: `Enemy.configure(data: EnemyData)`, signal `enemy_died(enemy, world_position, xp_amount, coin_amount)`; pickups signal `collected(value)`.
-- Consumes: player/base target nodes, `EnemyData`, health/damage components.
+- Consumes: player/base target nodes, `EnemyData`, combat components.
 
-- [ ] **Step 1: Write AI tests for target intent**
+- [ ] **Step 1: Write AI intent tests**: Raccoon selects player, Big Neighbor prefers base, Neighbor Kid maintains ranged band; freed targets reacquire safely.
 
-Raccoon selects player when available; Big Neighbor prefers base; Neighbor Kid maintains a minimum ranged distance. Verify dead/freed targets cause reacquisition instead of invalid access.
+- [ ] **Step 2: Implement shared AI think cadence** at 0.1 s while movement uses the last desired direction every physics frame. No per-frame global group query.
 
-- [ ] **Step 2: Implement shared enemy movement**
+- [ ] **Step 3: Implement archetype behavior**
 
-`EnemyAI` computes desired direction at a controlled think rate (for example every `0.1` seconds), while movement itself runs every physics frame using the last desired direction. No per-frame global group query is allowed.
+Raccoon: fast chase/contact pressure. Neighbor Kid: ranged-band movement and periodic nuisance projectile. Big Neighbor: slow base-first tank with heavy contact damage.
 
-- [ ] **Step 3: Implement archetype-specific behavior**
+- [ ] **Step 4: Emit death payload once**; level layer owns XP/coin scene spawning. Enemy code never accesses HUD/progression paths.
 
-Raccoon: chase and contact pressure. Neighbor Kid: maintain a ranged band and periodically launch a simple nuisance projectile. Big Neighbor: prefer the base and apply high contact damage at low speed.
+- [ ] **Step 5: Assemble scenes with processed artwork, soft shadows, collisions, stable anchors and idle/run/hurt animations**.
 
-- [ ] **Step 4: Implement death drops through a signal-driven drop path**
-
-Enemy emits a single death payload. The level/spawn layer creates XP and coin pickups at the death position. Enemy code must not hard-code the HUD or progression system path.
-
-- [ ] **Step 5: Assemble scenes with processed artwork and stable anchors**
-
-Each scene uses `AnimatedSprite2D`, soft shadow, collision, hurtbox, health, damage, AI. Confirm animation does not hop when switching idle/run/hurt.
-
-- [ ] **Step 6: Run tests and a 20-enemy smoke scene, then commit**
+- [ ] **Step 6: Run tests plus 20-enemy smoke scenario, commit**
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
@@ -597,7 +570,7 @@ git commit -m "feat: add enemy archetypes and loot drops"
 
 ---
 
-### Task 8: Add XP, coin progression and three-choice upgrades
+### Task 8: Add XP, coins and three-choice roguelike upgrades
 
 **Files:**
 - Create: `scripts/components/pickup_collector.gd`
@@ -611,36 +584,28 @@ git commit -m "feat: add enemy archetypes and loot drops"
 - Create: `tests/test_upgrade_system.gd`
 
 **Interfaces:**
-- Produces: `ProgressionSystem.add_xp(amount)`, `add_coins(amount)`, signal `level_ready(level)`; `UpgradeSystem.get_choices(count: int) -> Array[UpgradeData]`, `apply_upgrade(data)`.
-- Consumes: current player/weapon/defense tags.
+- Produces: `ProgressionSystem.add_xp(amount)`, `add_coins(amount)`, signal `level_ready(level)`; `UpgradeSystem.get_choices(count)`, `apply_upgrade(data)`.
+- Consumes: active player/weapon/defense tags.
 
-- [ ] **Step 1: Write tests for XP thresholds, tag filtering and one-shot application**
+- [ ] **Step 1: Write tests** for XP thresholds, XP overflow, unique valid choices, turret-tag filtering, and exactly-once selection application.
 
-Verify a turret upgrade is excluded when no turret tag is active, three unique valid choices are returned when available, and selecting a card twice only applies it once for the same overlay session.
+- [ ] **Step 2: Implement XP threshold** `required_xp = 12 + (level - 1) * 8`; carry overflow; coins are non-negative integers.
 
-- [ ] **Step 2: Implement progression counters**
-
-Use deterministic XP threshold formula `required_xp = 12 + (level - 1) * 8` for the vertical slice. Carry overflow XP into the next level. Coins are non-negative integers.
-
-- [ ] **Step 3: Implement upgrade filtering and effects**
-
-Initial upgrade effects:
+- [ ] **Step 3: Implement initial upgrades**
 
 ```text
-DOUBLE TROUBLE: effect_key=projectile_count_add, magnitude=1
-ANGRY FLIP-FLOP: effect_key=weapon_damage_mult, magnitude=1.25
-GARDEN PRESSURE: effect_key=turret_fire_rate_mult, magnitude=1.25, requires tag=turret
+DOUBLE TROUBLE: projectile_count_add +1
+ANGRY FLIP-FLOP: weapon_damage_mult 1.25
+GARDEN PRESSURE: turret_fire_rate_mult 1.25, requires turret tag
 ```
 
-- [ ] **Step 4: Build upgrade overlay**
-
-Three cards show icon/title/description. Opening overlay emits a request to `GameFlow` to enter `LEVEL_UP`; buttons disable immediately after one selection; selection signal carries the chosen `UpgradeData` exactly once.
+- [ ] **Step 4: Build overlay** with three icon/title/description cards. Disable all card buttons immediately after first valid selection and emit chosen `UpgradeData` once.
 
 - [ ] **Step 5: Run tests and commit**
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
-git add scripts/components/pickup_collector.gd scripts/systems scripts/ui scenes/ui/upgrade_overlay.tscn data/upgrades tests/test_upgrade_system.gd
+git add scripts/components/pickup_collector.gd scripts/systems/progression_system.gd scripts/systems/upgrade_system.gd scripts/ui/upgrade_overlay.gd scenes/ui/upgrade_overlay.tscn data/upgrades tests/test_upgrade_system.gd
 git commit -m "feat: add roguelike progression and upgrade choices"
 ```
 
@@ -655,32 +620,26 @@ git commit -m "feat: add roguelike progression and upgrade choices"
 - Create: `scenes/defenses/base.tscn`
 - Create: `scenes/defenses/water_turret.tscn`
 - Create: `scenes/defenses/water_projectile.tscn`
-- Create: `data/base_upgrades/*.tres`
+- Create: `data/base_upgrades/unlock_water_turret.tres`
+- Create: `data/base_upgrades/reinforced_walls.tres`
+- Create: `data/base_upgrades/turret_pressure.tres`
 - Create: `tests/test_water_turret.gd`
 
 **Interfaces:**
-- Produces: `BaseController.apply_upgrade(data)`, `WaterTurret.set_enabled(value)`, signal `base_destroyed`; Water projectile applies damage plus slow.
-- Consumes: enemy candidate overlaps, `HealthComponent`, progression coins.
+- Produces: `BaseController.apply_upgrade(data)`, `WaterTurret.set_enabled(value)`, signal `base_destroyed`; water projectile applies damage plus slow.
+- Consumes: enemy candidates, health component, progression coins.
 
-- [ ] **Step 1: Write turret tests**
+- [ ] **Step 1: Write turret tests** covering nearest target, freed target before fire, cooldown, exact MuzzlePoint origin, slow application, and disabled turret.
 
-Cover nearest-valid-target selection, target freed between scan and fire, fire cooldown, exact `MuzzlePoint` projectile origin, slow application, and no fire when disabled.
+- [ ] **Step 2: Implement candidate caching** from `DetectionArea` enter/exit and rescore every 0.15 s, not every physics tick.
 
-- [ ] **Step 2: Implement target scanning at fixed cadence**
+- [ ] **Step 3: Implement water projectile**: apply damage and slowdown to compatible enemy; non-slowable target still receives damage; splash VFX emitted by signal.
 
-Maintain candidates from `DetectionArea` enter/exit signals. Rescore at `0.15` second intervals, not every physics tick. Before firing, verify `is_instance_valid(target)` and target is not dead.
+- [ ] **Step 4: Implement base upgrades**
 
-- [ ] **Step 3: Implement water projectile**
+`unlock_water_turret`: cost 20, max level 1, enables turret. `reinforced_walls`: cost 25, max level 3, adds 50 max HP per level. `turret_pressure`: cost 30, max level 3, multiplies Water Turret fire rate by 1.15 per level. Purchase refuses insufficient coins.
 
-On hit: apply base damage and call a slowdown interface on compatible enemies for a bounded duration. Non-slowable targets still take damage. Spawn splash VFX via signal so the projectile does not know the level VFX container path.
-
-- [ ] **Step 4: Build base upgrade behavior**
-
-Base starts with health and visible defense slots. First purchased turret unlock enables Water Turret. Further vertical-slice upgrades can increase base max HP and turret fire rate; costs come from `.tres` data and purchase refuses insufficient coins.
-
-- [ ] **Step 5: Integrate supplied Water Turret and splash art**
-
-Base sprite is stationary; head/aim visual rotates or flips independently when the asset allows it. Confirm water visibly originates from the nozzle/muzzle.
+- [ ] **Step 5: Integrate processed Water Turret/splash art** and visually confirm water originates from nozzle.
 
 - [ ] **Step 6: Run tests and commit**
 
@@ -706,19 +665,12 @@ git commit -m "feat: add defended base and Water Turret"
 
 **Interfaces:**
 - Produces: `WaveDirector.start_wave(data)`, signals `enemy_spawn_requested(enemy_data)`, `wave_finished(index)`; `SpawnManager.spawn_enemy(data, position)`.
-- Consumes: spawn points and enemy-scene mapping.
 
-- [ ] **Step 1: Write wave-budget tests**
+- [ ] **Step 1: Write tests** for budget cap, eligibility, spawn exhaustion, deterministic seeded choices, and boss-survives-budget edge case.
 
-Verify threat spending never exceeds budget, enemy eligibility by wave, spawning stops after budget exhaustion, and wave completion waits for all live enemies including a surviving boss.
+- [ ] **Step 2: Implement seeded budget spending** using injected `RandomNumberGenerator`; choose only enemy data with `threat_cost <= remaining_budget`; when none fit, stop spawning and wait for live enemies.
 
-- [ ] **Step 2: Implement deterministic budget spending**
-
-Use a seeded `RandomNumberGenerator` injected into tests. At each spawn interval choose an enemy whose `threat_cost <= remaining_budget`; if none fit, stop spawning and wait for live enemies to clear.
-
-- [ ] **Step 3: Author five wave resources**
-
-Use initial budgets/pacing:
+- [ ] **Step 3: Author wave resources**
 
 ```text
 Wave 1: budget 18, interval 0.85, raccoon
@@ -728,11 +680,7 @@ Wave 4: budget 68, interval 0.55, all regular enemies, elite chance 0.12
 Wave 5: budget 85, interval 0.50, all regular enemies + miniboss scene
 ```
 
-These are starting balance values and stay editable in Inspector.
-
-- [ ] **Step 4: Implement spawn point selection**
-
-Prefer points outside the player camera-safe radius and avoid spawning directly on player/base collision shapes. If all preferred points are blocked, use the farthest valid configured point rather than creating an invalid position.
+- [ ] **Step 4: Spawn-point policy**: reject points inside player/base collision or camera-safe radius; if preferred points are blocked, choose farthest valid configured point.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -757,28 +705,17 @@ git commit -m "feat: add threat-budget wave director"
 - Create: `tests/test_game_flow.gd`
 
 **Interfaces:**
-- Produces: enum `GameFlow.State { BOOT, WAVE_START, COMBAT, LEVEL_UP, WAVE_COMPLETE, SHOP, PAUSED, GAME_OVER }`, method `transition_to(next_state)`, signal `state_changed(previous, current)`.
-- Consumes: wave, progression, base death, player incapacitation and UI events.
+- Produces enum `GameFlow.State { BOOT, WAVE_START, COMBAT, LEVEL_UP, WAVE_COMPLETE, SHOP, PAUSED, GAME_OVER }`, `transition_to(next_state)`, signal `state_changed(previous, current)`.
 
-- [ ] **Step 1: Write transition tests**
+- [ ] **Step 1: Write transition tests** for normal wave path, LEVEL_UP returning once to COMBAT, GAME_OVER blocking combat transitions, and player death not causing game over.
 
-Assert legal path BOOT→WAVE_START→COMBAT→WAVE_COMPLETE→SHOP→WAVE_START, LEVEL_UP returns to the prior COMBAT state, GAME_OVER blocks combat transitions until restart, and upgrade selection cannot resume twice.
+- [ ] **Step 2: Implement simulation gating** via explicit `simulation_enabled` signals; UI remains processable during LEVEL_UP. Avoid using `get_tree().paused` as the only control mechanism.
 
-- [ ] **Step 2: Implement state ownership without relying on global `get_tree().paused` for every case**
+- [ ] **Step 3: Build HUD** for player HP, base HP, XP, level, coins, wave; update by signals rather than frame polling.
 
-Combat simulation nodes receive an explicit simulation-enabled signal; UI remains interactive. During `LEVEL_UP`, enemy/projectile/turret simulation stops while overlay buttons continue processing.
+- [ ] **Step 4: Build shop** for the three base upgrades; purchase validates coins and max level before applying.
 
-- [ ] **Step 3: Build HUD**
-
-HUD displays player HP, base HP, XP progress, level, coins and wave number. It subscribes to signals; it does not poll actor nodes every frame.
-
-- [ ] **Step 4: Build between-wave shop**
-
-Show available base upgrades and costs. Purchase checks coins through progression service, applies one upgrade, refreshes UI, and cannot spend negative balance.
-
-- [ ] **Step 5: Build game-over/restart**
-
-Base death transitions to GAME_OVER; restart reloads the gameplay scene with fresh run state. Player death alone starts a timed incapacity/revive path and does not open game over.
+- [ ] **Step 5: Implement player incapacity/revive and base game-over**; restart reloads a clean run scene.
 
 - [ ] **Step 6: Run tests and commit**
 
@@ -790,20 +727,19 @@ git commit -m "feat: add game flow and core UI"
 
 ---
 
-### Task 12: Assemble the editable Backyard level and integrate final core art
+### Task 12: Assemble editable Backyard level and integrate final core art
 
 **Files:**
+- Create: `scripts/levels/backyard_controller.gd`
 - Create: `scenes/levels/backyard.tscn`
 - Modify: `project.godot`
-- Populate: `assets/environment/`, approved actor/defense/VFX runtime frames
+- Populate approved runtime art in `assets/environment/`, `assets/characters/`, `assets/enemies/`, `assets/weapons/`, `assets/defenses/`, `assets/vfx/`
 
 **Interfaces:**
-- Consumes all gameplay scenes and systems.
-- Produces the first fully playable scene and named containers `Actors`, `Enemies`, `Defenses`, `Pickups`, `Projectiles`, `VFX`, `Systems`, `HUD`.
+- Consumes all gameplay scenes/systems.
+- Produces first fully playable scene and composition-root signal wiring.
 
-- [ ] **Step 1: Build the level hierarchy**
-
-Required hierarchy:
+- [ ] **Step 1: Build hierarchy**
 
 ```text
 Backyard (Node2D)
@@ -827,30 +763,22 @@ Backyard (Node2D)
 └── HUD (CanvasLayer)
 ```
 
-- [ ] **Step 2: Reconstruct the concept layout as editable layers**
+- [ ] **Step 2: Reconstruct concept layout as editable layers**: ground, base/house, shed/fence/bush/tree props and foreground occluders separately. Use Y-sort for actors and authored z-index for roof/foreground.
 
-Place ground, house/base, shed/fence/bush/tree props and foreground occluders separately. Use Y-sort for actors and authored z-index for roof/foreground elements. Do not use the concept screenshot as the collision map.
+- [ ] **Step 3: Add collisions/playable bounds** with explicit shapes matching walkable silhouettes; spawn points sit near perimeter approaches.
 
-- [ ] **Step 3: Add collisions and playable bounds**
+- [ ] **Step 4: Wire signals only in `backyard_controller.gd`**
 
-House, fence and solid garden props get explicit collision shapes that follow walkable silhouettes without excessive tiny segments. Spawn points sit near perimeter approaches.
+Connect enemy death → drop spawn; pickup → progression; level ready → upgrade overlay/GameFlow; base destroyed → GAME_OVER; wave finished → SHOP; shop continue → next wave; restart → scene reload. No alternative editor-only wiring path is used for these core integrations.
 
-- [ ] **Step 4: Wire signals at composition root**
+- [ ] **Step 5: Run complete 5-minute smoke playthrough** across movement, aim, combat, three enemies, XP/coins, level-up, turret, base damage, wave progression and shop.
 
-Connect enemy deaths to drop spawning, pickups to progression, level-up to overlay, base death to game flow, wave completion to shop, and restart to scene reload. Keep the wiring in a focused level/controller script or explicit editor connections, not inside unrelated components.
-
-- [ ] **Step 5: Run a full 5-minute smoke playthrough**
-
-Check player movement, aim, Flip-Flop hits, three enemy behaviors, XP, coin pickup, level-up pause/resume, turret fire, base damage, wave progression and shop transition.
-
-- [ ] **Step 6: Perform visual QA against concept**
-
-Reject and fix: wrong Y-sort, hovering feet, detached weapon, bad muzzle position, white halos, clipped animation frames, oversized VFX, unreadable UI, enemy sprite scale inconsistency, and foreground objects failing to occlude correctly.
+- [ ] **Step 6: Visual QA against concept** for Y-sort, ground anchors, weapon hand alignment, muzzle origin, white halos, clipping, VFX scale, HUD readability, actor scale consistency and foreground occlusion.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add scenes/levels project.godot assets/environment assets/characters assets/enemies assets/weapons assets/defenses assets/vfx
+git add scripts/levels scenes/levels project.godot assets/environment assets/characters assets/enemies assets/weapons assets/defenses assets/vfx
 git commit -m "feat: assemble playable backyard level"
 ```
 
@@ -865,13 +793,9 @@ git commit -m "feat: assemble playable backyard level"
 **Interfaces:**
 - Produces: `SaveService.load_data(path := default_path) -> Dictionary`, `save_data(data, path := default_path) -> Error`, `defaults() -> Dictionary`.
 
-- [ ] **Step 1: Write tests for missing, partial and corrupt files**
+- [ ] **Step 1: Write tests** for missing file, missing `screen_shake`, wrong currency type, malformed JSON.
 
-Cases: no file returns defaults; missing `screen_shake` fills default; wrong type for `currency` falls back safely; malformed JSON does not crash and returns defaults.
-
-- [ ] **Step 2: Implement versioned JSON save**
-
-Default shape:
+- [ ] **Step 2: Implement versioned JSON default**
 
 ```json
 {
@@ -881,11 +805,9 @@ Default shape:
 }
 ```
 
-Validate each field independently and never trust loaded types.
+Validate each field independently and fall back per field rather than rejecting the entire save when only one optional field is wrong.
 
-- [ ] **Step 3: Apply settings on startup and record run progress on game over**
-
-Persist highest wave using `max(previous, current)`. Do not persist the active run itself.
+- [ ] **Step 3: Apply settings at startup and save highest wave/currency/unlocks on game over; do not save active run state.**
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -897,50 +819,47 @@ git commit -m "feat: add resilient save and settings service"
 
 ---
 
-### Task 14: Add the Wave 5 mini-boss
+### Task 14: Add Wave 5 mini-boss
 
 **Files:**
 - Create: `scripts/enemies/miniboss_ai.gd`
 - Create: `scenes/enemies/miniboss.tscn`
 - Create: `data/enemies/miniboss.tres`
 - Modify: `data/waves/wave_05.tres`
-- Extend: `tests/test_enemy_ai.gd`, `tests/test_wave_director.gd`
+- Modify: `tests/test_enemy_ai.gd`
+- Modify: `tests/test_wave_director.gd`
 
 **Interfaces:**
-- Produces a boss with at least two readable attack states and normal `Enemy` health/death contracts.
+- Produces boss with normal `Enemy` health/death contract plus at least two readable attack states.
 
-- [ ] **Step 1: Add boss tests**
-
-Verify boss does not count as a regular budget spawn, wave 5 cannot complete while boss is alive, and boss state transitions remain valid if player becomes incapacitated.
+- [ ] **Step 1: Add tests**: boss is not spent as a regular threat-budget spawn, wave 5 waits while boss lives, boss reacquires a valid objective when player is incapacitated.
 
 - [ ] **Step 2: Implement two-state boss behavior**
 
-State A: slow pursuit toward base/player zone with telegraphed heavy contact/ground attack. State B: stops briefly and performs a radial or fan nuisance attack with a clear wind-up. State changes use cooldowns and health threshold, not random state changes every frame.
+State A: slow pursuit with telegraphed heavy ground/contact attack. State B: brief stop plus clearly telegraphed fan/radial nuisance attack. State changes use cooldown plus health threshold, not per-frame randomness.
 
-- [ ] **Step 3: Give boss bespoke presentation**
-
-Use a visibly distinct processed sprite/scale, boss health bar and stronger but readable VFX. Do not create the boss by simply multiplying Big Neighbor HP.
+- [ ] **Step 3: Add bespoke presentation**: distinct processed sprite/scale, boss HP bar, stronger readable VFX; do not reuse Big Neighbor with only multiplied HP.
 
 - [ ] **Step 4: Run wave-5 smoke test and commit**
 
 ```bash
 $GODOT_BIN --headless --path . --script res://tests/run_all.gd
-git add scripts/enemies/miniboss_ai.gd scenes/enemies/miniboss.tscn data/enemies/miniboss.tres data/waves/wave_05.tres tests
+git add scripts/enemies/miniboss_ai.gd scenes/enemies/miniboss.tscn data/enemies/miniboss.tres data/waves/wave_05.tres tests/test_enemy_ai.gd tests/test_wave_director.gd
 git commit -m "feat: add wave five mini-boss"
 ```
 
 ---
 
-### Task 15: Performance pass, full regression and acceptance gate
+### Task 15: Performance pass, regression and acceptance gate
 
 **Files:**
-- Modify only files proven by profiling/QA to need changes
 - Create: `tests/perf_enemy_swarm.gd`
 - Create: `docs/qa/vertical-slice-checklist.md`
+- Modify only gameplay files proven by profiling/QA to need correction
 
 **Interfaces:**
-- Consumes entire vertical slice.
-- Produces a tested milestone with documented evidence and no known acceptance-blocking defects.
+- Consumes the complete vertical slice.
+- Produces documented automated, performance and visual QA evidence.
 
 - [ ] **Step 1: Run full headless regression**
 
@@ -949,23 +868,19 @@ $GODOT_BIN --headless --path . --script res://tests/run_all.gd
 $GODOT_BIN --headless --path . --editor --quit
 ```
 
-Expected: exit code `0`, no parse/startup/resource errors.
+Expected: exit code 0, no parse/startup/resource errors.
 
 - [ ] **Step 2: Run 100-enemy stress scenario**
 
-`tests/perf_enemy_swarm.gd` loads the backyard or a stripped performance scene, spawns 100 regular enemies, runs simulation for a fixed 30 seconds, and reports average/max physics-frame time plus active node count. Treat sustained physics time above 16.67 ms on the target PC as a profiling trigger, not as permission for blind rewrites.
+`tests/perf_enemy_swarm.gd` loads gameplay, spawns 100 regular enemies, runs fixed 30 seconds, and reports average/max physics-frame time and active node count. Sustained physics time above 16.67 ms on target PC triggers profiling.
 
-- [ ] **Step 3: Profile only measured hotspots**
+- [ ] **Step 3: Profile only measured hotspots** in AI think cadence, target scanning, projectile/VFX churn and collision breadth. Introduce pooling only if churn is proven material.
 
-First checks: AI think cadence, target scanning frequency, projectile churn, VFX churn, collision layer breadth. Introduce pooling only if create/free churn is confirmed materially expensive.
-
-- [ ] **Step 4: Complete the acceptance playthrough**
-
-Document pass/fail for:
+- [ ] **Step 4: Complete acceptance playthrough and record each item in `docs/qa/vertical-slice-checklist.md`**
 
 ```text
 player spawns and moves
-manual aim and soft auto-target both work
+manual aim and soft auto-target work
 Flip-Flop projectile starts at MuzzlePoint
 three enemies are behaviorally distinct
 player damage/incapacity/revive works
@@ -983,15 +898,11 @@ restart begins a clean run
 save corruption falls back safely
 ```
 
-- [ ] **Step 5: Complete visual QA against the approved concept**
+- [ ] **Step 5: Capture representative gameplay frames** for player firing, crowded combat, turret firing, upgrade overlay and boss; inspect every visual failure class in the spec and fix/retest failures.
 
-Capture gameplay at representative moments: player firing, crowded combat, turret firing, upgrade overlay, wave-5 boss. Inspect for all visual failure cases listed in the spec. Fix and recapture every failure before marking the checklist complete.
+- [ ] **Step 6: Final regression**: rerun all tests, editor-load check, stress scenario and one full five-wave playthrough.
 
-- [ ] **Step 6: Final regression after fixes**
-
-Re-run all headless tests, editor-load check, stress scenario and one complete five-wave playthrough.
-
-- [ ] **Step 7: Commit milestone evidence**
+- [ ] **Step 7: Commit evidence and fixes**
 
 ```bash
 git add tests/perf_enemy_swarm.gd docs/qa
@@ -1003,16 +914,16 @@ git commit -m "test: complete vertical slice acceptance pass"
 
 ## Execution Order and Gates
 
-Execute tasks strictly in order because later tasks rely on interfaces defined earlier. A task is complete only when its own tests pass and its stated runtime/visual check has been performed. Do not batch several failing tasks into a later cleanup pass.
+Execute Tasks 1–15 in order. A task completes only when its automated test and stated gameplay/visual check pass. Do not carry known failures into the next task.
 
-The development loop for every task is:
+Per-task loop:
 
 ```text
 write/extend failing test
 → run and confirm expected failure
 → implement minimal correct behavior
 → run automated tests
-→ run the task-specific gameplay/visual smoke check
+→ run task-specific gameplay/visual smoke check
 → fix defects
 → rerun
 → commit
@@ -1020,9 +931,9 @@ write/extend failing test
 
 ## Final Self-Review
 
-- Spec coverage: all vertical-slice requirements map to Tasks 1–15.
-- No mid-run save, multiplayer, freeform tower placement, campaign or large inventory work is included.
-- Core interfaces are defined before consumers: data → components → player/weapons/enemies → progression/defense → waves/game-flow → level → saves/boss/performance.
-- Review Focus items are explicitly tested in Tasks 6, 8, 9, 10, 11 and 13.
-- Visual QA is required at asset ingestion, level assembly and final acceptance; it is not deferred to the end only.
-- Performance optimization is evidence-driven and occurs after a measurable stress baseline.
+- Spec coverage: every vertical-slice requirement maps to Tasks 1–15.
+- Placeholder scan: no TBD/TODO/fill-in-later instructions remain; source filenames are discovered deterministically from the supplied archive at execution time instead of being guessed in this plan.
+- Type/interface consistency: data contracts precede consumers; `MuzzlePoint`, enemy death payload, progression, game-flow states and save-service signatures are used consistently.
+- Review Focus coverage: stale targets (Tasks 5/6/9), duplicate upgrade application (Tasks 8/11), corrupt saves (Task 13), muzzle origin (Tasks 6/9), wave/boss completion (Tasks 10/14).
+- Visual QA occurs at asset ingestion, level assembly and final acceptance instead of being deferred only to the end.
+- Performance work is evidence-driven after a 100-enemy baseline.
