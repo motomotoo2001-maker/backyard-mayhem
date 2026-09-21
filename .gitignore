@@ -1,0 +1,7 @@
+.godot/
+.tools/
+.superpowers/
+.worktrees/
+*.tmp
+*.log
+.DS_Store
