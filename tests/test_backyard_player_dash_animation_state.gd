@@ -35,4 +35,9 @@ func run() -> void:
 
     dash.active = false
     TestUtils.assert_eq(StringName(player._select_animation_state(Vector2.RIGHT)), &"run", "normal movement should return to run after dash")
+
+    player.dash_component = null
+    player.animated_sprite = null
+    sprite.free()
+    dash.free()
     player.free()
