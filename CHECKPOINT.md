@@ -56,8 +56,10 @@
 - Unfinished attack/hurt/death one-shots cannot be overwritten by locomotion; hurt may interrupt attack and death may interrupt everything.
 - `enemy_asset_policy.gd` only accepts normalized single-frame PNGs under `assets/runtime/enemies/<family>/<action>/<action>_NN.png` for raccoon/cat/bulldog/pigeon/neighbor_kid/skateboard_teen/boss.
 - Concept/reference/user_pack/contact-sheet assets and unknown enemy families are rejected from runtime paths.
+- `enemy_frame_validator.gd` checks transparent frame margins, clipping, detached alpha debris/accidentally baked VFX and sequence ground-anchor drift while allowing each enemy family to choose its own canvas size.
 - Verified run `35889233857` on commit `eeca13875687b99d7289e90dd7801960c28eb700`: parser PASS, **10 test files / 0 failures**.
 - Verified run `35889870661` on commit `ef10149d378b625bb4eb62322bb501d1559a6e49`: parser PASS, **12 test files / 0 failures**.
+- Verified run `35890282608` on commit `e9c3b6afd5365b4929aa823033a5cb23808b1ab8`: parser PASS, **13 test files / 0 failures**.
 
 ## Combat/VFX QA
 - `combat_vfx_timing_profile.gd` synchronizes combat feedback to animation frames instead of loose timers:
@@ -86,7 +88,7 @@
 2. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
 3. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
 4. Normalize Water VFX into transparent strips with fixed origins/anchors.
-5. Add enemy frame visual validator, then normalize Raccoon -> Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
+5. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
 6. Polish tower/building upgrade visuals, backyard composition and HUD readability.
 7. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
 8. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, checkpoint/tag after the full-game gate is green.
