@@ -14,8 +14,11 @@ var runtime = RuntimeCoordinator.new()
 @onready var footer_label: Label = $BootstrapUI/Footer
 @onready var boss_alert: ColorRect = $BootstrapUI/BossAlert
 @onready var boss_alert_label: Label = $BootstrapUI/BossAlert/Label
+@onready var base_health_fill: ColorRect = $BootstrapUI/BaseHealthBar/Fill
+@onready var base_health_label: Label = $BootstrapUI/BaseHealthBar/Label
 
 @onready var base_visual: Node2D = $BaseVisual
+@onready var base_core: Polygon2D = $BaseVisual/Core
 @onready var sandbags: Polygon2D = $BaseVisual/Sandbags
 @onready var armor: Polygon2D = $BaseVisual/Armor
 @onready var power_cable: Line2D = $BaseVisual/PowerCable
@@ -24,6 +27,10 @@ var runtime = RuntimeCoordinator.new()
 @onready var turret_socket_1: Polygon2D = $BaseVisual/TurretSocket1
 @onready var turret_socket_2: Polygon2D = $BaseVisual/TurretSocket2
 @onready var turret_socket_3: Polygon2D = $BaseVisual/TurretSocket3
+@onready var cracks: Node2D = $BaseVisual/Cracks
+@onready var smoke: Node2D = $BaseVisual/Smoke
+@onready var debris: Node2D = $BaseVisual/Debris
+@onready var electric_overlay: Node2D = $BaseVisual/ElectricOverlay
 
 func _ready() -> void:
     _refresh_view()
@@ -44,6 +51,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
             _purchase_first_available(&"base")
         KEY_3:
             _purchase_first_available(&"utility")
+        KEY_D:
+            if runtime.damage_base(20.0):
+                _refresh_view()
+        KEY_H:
+            if runtime.repair_base(20.0):
+                _refresh_view()
         KEY_R:
             runtime.reset()
             _refresh_view()
@@ -55,7 +68,7 @@ func _advance_flow() -> void:
             runtime.complete_wave()
         &"intermission":
             runtime.start_next_wave()
-        &"victory":
+        &"victory", &"defeat":
             runtime.reset()
     _refresh_view()
 
@@ -90,6 +103,7 @@ func _refresh_view() -> void:
 
     var lines: Array[String] = [
         "%s    %s" % [String(view.get("coins_text", "COINS 0")), String(view.get("base_text", "BASE TIER 0"))],
+        String(view.get("base_hp_text", "BASE HP 0 / 0")),
         "%s    %s" % [String(view.get("threat_text", "THREAT 0")), String(view.get("focus_text", ""))],
     ]
 
@@ -97,10 +111,14 @@ func _refresh_view() -> void:
         lines.append("")
         lines.append("1 HERO   2 BASE   3 UTILITY")
         lines.append(_offer_summary(state.get("offers", []) as Array))
+    elif StringName(state.get("state", &"")) == &"defeat":
+        lines.append("")
+        lines.append("PRESS SPACE OR R TO RESTART")
 
     status_label.text = "\n".join(lines)
-    footer_label.text = "SPACE: complete/start wave    1/2/3: buy upgrade    R: reset preview"
+    footer_label.text = "SPACE: wave flow    1/2/3: upgrade    D: damage base    H: repair    R: reset"
     _apply_visual_state(visual)
+    _apply_base_health(view)
 
 func _apply_visual_state(visual: Dictionary) -> void:
     var base_scale := float(visual.get("base_scale", 1.0))
@@ -110,6 +128,21 @@ func _apply_visual_state(visual: Dictionary) -> void:
     power_cable.visible = bool(visual.get("show_power_cables", false))
     beacon.visible = bool(visual.get("show_beacon", false))
     power_coils.visible = bool(visual.get("show_power_coils", false))
+    cracks.visible = bool(visual.get("show_cracks", false))
+    smoke.visible = bool(visual.get("show_smoke", false))
+    debris.visible = bool(visual.get("show_debris", false))
+    electric_overlay.visible = bool(visual.get("show_electric", false))
+
+    var health_state := String(visual.get("base_health_state", "fresh"))
+    match health_state:
+        "broken":
+            base_core.modulate = Color(0.48, 0.48, 0.48, 1.0)
+        "critical":
+            base_core.modulate = Color(0.92, 0.58, 0.48, 1.0)
+        "damaged":
+            base_core.modulate = Color(0.94, 0.78, 0.67, 1.0)
+        _:
+            base_core.modulate = Color.WHITE
 
     var slots := int(visual.get("turret_slots", 0))
     turret_socket_1.visible = slots >= 1
@@ -118,6 +151,17 @@ func _apply_visual_state(visual: Dictionary) -> void:
 
     boss_alert.visible = bool(visual.get("boss_alert_visible", false))
     boss_alert_label.text = String(visual.get("boss_alert_text", "BOSS WAVE — WATCH THE TELEGRAPHS"))
+
+func _apply_base_health(view: Dictionary) -> void:
+    var ratio := clampf(float(view.get("base_health_ratio", 0.0)), 0.0, 1.0)
+    base_health_fill.offset_right = 4.0 + 344.0 * ratio
+    if ratio > 0.66:
+        base_health_fill.color = Color(0.28, 0.72, 0.34, 0.95)
+    elif ratio > 0.33:
+        base_health_fill.color = Color(0.9, 0.62, 0.18, 0.95)
+    else:
+        base_health_fill.color = Color(0.88, 0.2, 0.16, 0.95)
+    base_health_label.text = String(view.get("base_hp_text", "BASE HP 0 / 0"))
 
 func _offer_summary(offers: Array) -> String:
     var parts: Array[String] = []
