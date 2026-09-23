@@ -83,7 +83,6 @@ func _process(delta: float) -> void:
         aim_controller.set_manual_aim_direction(Vector2.ZERO, false)
     weapon_controller.rotation = aim_controller.get_aim_direction().angle()
 
-
 func _on_dash_started(direction: Vector2) -> void:
     if hurtbox != null and hurtbox.has_method("set_invulnerable"):
         hurtbox.set_invulnerable(true)
@@ -125,7 +124,8 @@ func _select_animation_state(input_direction: Vector2) -> StringName:
 func _on_weapon_shot_fired(_projectile) -> void:
     if _building or _incapacitated or animated_sprite == null:
         return
-    if _action_animation == &"hurt" or _action_animation == &"defeat":
+    var action_text := String(_action_animation)
+    if action_text.begins_with("hurt") or action_text.begins_with("death") or action_text.begins_with("defeat"):
         return
     _action_animation = _resolve_animation_name(&"fire", Vector2.ZERO)
     animated_sprite.play(_action_animation)
@@ -133,7 +133,7 @@ func _on_weapon_shot_fired(_projectile) -> void:
 func _on_animation_finished() -> void:
     if animated_sprite == null:
         return
-    if _action_animation == &"defeat" and animated_sprite.animation == &"defeat":
+    if _incapacitated and _action_animation != &"" and animated_sprite.animation == _action_animation:
         return
     if _action_animation != &"" and animated_sprite.animation == _action_animation:
         _action_animation = &""
@@ -181,8 +181,9 @@ func _on_health_changed(current: float, _maximum: float) -> void:
     _last_health = current
     if not took_damage or current <= 0.0 or _incapacitated or animated_sprite == null:
         return
-    _action_animation = &"hurt"
-    animated_sprite.play(&"hurt")
+    _action_animation = _resolve_animation_name(&"hurt", Vector2.ZERO)
+    if animated_sprite.sprite_frames.has_animation(_action_animation):
+        animated_sprite.play(_action_animation)
 
 func _on_health_died(_source) -> void:
     if _incapacitated:
@@ -190,9 +191,10 @@ func _on_health_died(_source) -> void:
     _incapacitated = true
     _revive_remaining = maxf(revive_delay, 0.05)
     set_controls_enabled(false)
-    _action_animation = &"defeat"
-    if animated_sprite != null and animated_sprite.sprite_frames.has_animation(&"defeat"):
-        animated_sprite.play(&"defeat")
+    if animated_sprite != null and animated_sprite.sprite_frames != null:
+        _action_animation = _resolve_animation_name(&"death", Vector2.ZERO)
+        if animated_sprite.sprite_frames.has_animation(_action_animation):
+            animated_sprite.play(_action_animation)
     incapacitated.emit()
 
 func _finish_revive() -> void:
@@ -221,6 +223,13 @@ func _resolve_animation_name(base_state: StringName, input_direction: Vector2) -
             return directional_run
         if sprite.sprite_frames.has_animation(&"run"):
             return &"run"
+
+    if base_state == &"death":
+        var directional_defeat := StringName("defeat_%s" % direction_suffix)
+        if sprite.sprite_frames.has_animation(directional_defeat):
+            return directional_defeat
+        if sprite.sprite_frames.has_animation(&"defeat"):
+            return &"defeat"
 
     return base_state
 
