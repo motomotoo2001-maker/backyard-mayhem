@@ -39,6 +39,25 @@ func run() -> void:
     var empty_result: Dictionary = Validator.validate_image(empty)
     TestUtils.assert_true(not empty_result.get("ok", true), "fully transparent frame must fail")
 
+    # Visual QA regression: label fragments / crop debris may sit safely inside
+    # the outer margins, so bounds-only validation cannot detect them.
+    var detached_artifact := Image.create(320, 320, false, Image.FORMAT_RGBA8)
+    detached_artifact.fill(Color(0, 0, 0, 0))
+    detached_artifact.fill_rect(Rect2i(110, 40, 100, 250), Color.WHITE)
+    detached_artifact.fill_rect(Rect2i(28, 44, 18, 12), Color.WHITE)
+    var artifact_result: Dictionary = Validator.validate_image(detached_artifact)
+    TestUtils.assert_true(not artifact_result.get("ok", true), "large detached alpha artifact must fail")
+    TestUtils.assert_true(artifact_result.get("errors", []).has("detached_alpha_artifact"), "detached artifact must report a dedicated error")
+
+    # A couple of antialias/noise pixels can appear during export and should not
+    # reject an otherwise clean frame.
+    var tiny_noise := Image.create(320, 320, false, Image.FORMAT_RGBA8)
+    tiny_noise.fill(Color(0, 0, 0, 0))
+    tiny_noise.fill_rect(Rect2i(110, 40, 100, 250), Color.WHITE)
+    tiny_noise.fill_rect(Rect2i(28, 44, 2, 2), Color.WHITE)
+    var tiny_noise_result: Dictionary = Validator.validate_image(tiny_noise)
+    TestUtils.assert_true(tiny_noise_result.get("ok", false), "tiny detached alpha noise must be tolerated")
+
     var anchor_a := Image.create(320, 320, false, Image.FORMAT_RGBA8)
     anchor_a.fill(Color(0, 0, 0, 0))
     anchor_a.fill_rect(Rect2i(30, 30, 260, 274), Color.WHITE)
