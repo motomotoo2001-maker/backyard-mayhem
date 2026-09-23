@@ -106,6 +106,15 @@
 - Verified run `35897626344` on commit `9854ca0fc29af21ce2f2491f7618ad7aaa61b9c8`: parser PASS, **19 test files / 0 failures**.
 - Verified run `35897884980` on commit `d18cebaaa56502da51801e2d2510bca6cd862c4c`: parser PASS, **20 test files / 0 failures**.
 
+## Vertical-slice session runtime QA
+- `vertical_slice_session.gd` now orchestrates the actual run lifecycle: active wave -> reward -> intermission -> strategic upgrade -> next wave -> final victory.
+- Rewards are credited exactly once; repeating final completion cannot duplicate coins.
+- Intermissions expose the three established Hero/Base/Utility lanes and allow one strategic purchase before the next wave.
+- Purchased upgrades are tracked for the run; duplicate purchases are blocked.
+- `base_fortification` and `turret_socket` advance the visible base tier, capped at tier 3.
+- Intermissions may be skipped without purchasing; final victory cannot advance beyond wave 5 and shows no upgrade shop.
+- Verified run `35900490238` on commit `80c449effec08bb12e78cdb099b29bc58b212d4b`: Godot 4.7.2 parser PASS and full headless suite GREEN.
+
 ## CI hardening
 - GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
 - `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
@@ -120,7 +129,7 @@
 
 ## Current priorities
 1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
-2. Integrate verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
+2. Integrate `vertical_slice_session.gd` plus verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
 3. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
 4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
 5. Normalize Water VFX into transparent strips with fixed origins/anchors.
