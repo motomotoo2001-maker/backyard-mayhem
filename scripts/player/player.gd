@@ -1,6 +1,8 @@
 class_name BackyardPlayer
 extends CharacterBody2D
 
+const HeroDirectionResolver = preload("res://scripts/art/hero_direction_resolver.gd")
+
 signal incapacitated
 signal revived
 
@@ -17,6 +19,7 @@ signal revived
 
 @export var revive_delay: float = 2.0
 @export_range(0.05, 1.0) var revive_fraction: float = 0.5
+@export_range(0.0, 20.0, 0.5) var direction_hysteresis_degrees: float = 6.0
 
 var _manual_aim_seconds := 0.0
 var _incapacitated := false
@@ -24,6 +27,7 @@ var _revive_remaining := 0.0
 var _building := false
 var _action_animation: StringName = &""
 var _facing_vector := Vector2(1, 1).normalized()
+var _facing_direction: String = "front_right"
 var _last_health := 0.0
 
 func _ready() -> void:
@@ -217,21 +221,14 @@ func _resolve_direction_suffix(base_state: StringName, input_direction: Vector2)
         direction = input_direction
     else:
         direction = _facing_vector
+
     if direction.length_squared() > 0.001:
         _facing_vector = direction.normalized()
-    var angle := wrapf(rad_to_deg(_facing_vector.angle()), 0.0, 360.0)
-    if angle >= 67.5 and angle < 112.5:
-        return "front"
-    if angle >= 22.5 and angle < 67.5:
-        return "front_right"
-    if angle >= 337.5 or angle < 22.5:
-        return "right"
-    if angle >= 292.5 and angle < 337.5:
-        return "back_right"
-    if angle >= 247.5 and angle < 292.5:
-        return "back"
-    if angle >= 202.5 and angle < 247.5:
-        return "back_left"
-    if angle >= 157.5 and angle < 202.5:
-        return "left"
-    return "front_left"
+
+    _facing_direction = HeroDirectionResolver.resolve(
+        _facing_vector,
+        _facing_direction,
+        0.0,
+        direction_hysteresis_degrees
+    )
+    return _facing_direction
