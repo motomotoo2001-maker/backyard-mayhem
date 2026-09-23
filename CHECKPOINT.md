@@ -51,18 +51,26 @@
 - `hero_animation_state_resolver.gd` enforces action priority/one-shot locking: `death > hurt > dash > build > fire > run/idle`.
 - `hero_spriteframes_validator.gd` checks all 56 SpriteFrames animations for counts, FPS, loop flags and missing textures.
 
+## Enemy animation QA
+- `enemy_animation_state_resolver.gd` enforces `death > hurt > attack > run/idle`.
+- Unfinished attack/hurt/death one-shots cannot be overwritten by locomotion; hurt may interrupt attack and death may interrupt everything.
+- Verified run `35889233857` on commit `eeca13875687b99d7289e90dd7801960c28eb700`: parser PASS, **10 test files / 0 failures**.
+
 ## Combat/VFX QA
 - `combat_vfx_timing_profile.gd` synchronizes combat feedback to animation frames instead of loose timers:
   - fire muzzle/recoil/air-blast on frame 1; recovery on frame 3.
   - dash trail start/peak/end on frames 0/1/3.
   - hurt impact/recovery on frames 0/2.
 - Test timing is derived from the canonical hero FPS profile, including Dash = 18 FPS.
+- `water_vfx_asset_policy.gd` only allows canonical transparent runtime paths under `assets/runtime/vfx/water/<kind>/<kind>_NN.png` for stream/splash/impact/projectile/foam/vortex families; raw concept sheets and turret-baked effects are rejected.
+- Verified run `35889565334` on commit `6fd13a91d9bc2d28dcdbf2b73f18773c95922fc5`: parser PASS, **11 test files / 0 failures**.
 
 ## CI hardening
 - GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
 - `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
-- `tests/run_all.gd` now rejects non-instantiable scripts with `Script.can_instantiate()` instead of hanging until timeout.
-- Fresh verified run `35888694500` on commit `6b967ed061fbdbbf344d47627df9ba004d377692`: parser PASS, **9 test files / 0 failures**, no hidden parse/script errors.
+- `tests/run_all.gd` rejects non-instantiable scripts with `Script.can_instantiate()` instead of hanging until timeout.
+- Earlier timing-test parse issue was traced to Godot 4.7.2 type inference; explicit float typing fixed it at the source.
+- Verified run `35888694500` on commit `6b967ed061fbdbbf344d47627df9ba004d377692`: parser PASS, **9 test files / 0 failures**.
 
 ## Visual audit findings
 - Several uploaded enemy/water sheets are good style references but are **concept sheets, not production atlases**.
@@ -75,7 +83,7 @@
 2. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
 3. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
 4. Normalize Water VFX into transparent strips with fixed origins/anchors.
-5. Normalize enemy runtime sprites and add readable hit/death feedback.
+5. Add enemy runtime asset policy/frame validator, then normalize Raccoon -> Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
 6. Polish tower/building upgrade visuals, backyard composition and HUD readability.
 7. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
 8. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, checkpoint/tag after the full-game gate is green.
