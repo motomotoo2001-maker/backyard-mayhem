@@ -40,4 +40,4 @@ func run() -> void:
     TestUtils.assert_eq(paths.size(), names.size(), "every water VFX filename should have a runtime path")
     for runtime_path_variant in paths:
         var runtime_path := String(runtime_path_variant)
-        TestUtils.assert_true(AssetPolicy.is_allowed_runtime_path(runtime_path), "manifest path must satisfy water asset policy: %s" % runtime_path)
+        TestUtils.assert_true(AssetPolicy.is_valid_runtime_path(runtime_path), "manifest path must satisfy water asset policy: %s" % runtime_path)
