@@ -151,7 +151,7 @@ static func _find_alpha_components(image: Image, alpha_threshold: float) -> Arra
     var visited := PackedByteArray()
     visited.resize(width * height)
     var components: Array = []
-    var neighbors := [
+    var neighbors: Array[Vector2i] = [
         Vector2i(1, 0),
         Vector2i(-1, 0),
         Vector2i(0, 1),
@@ -183,15 +183,15 @@ static func _find_alpha_components(image: Image, alpha_threshold: float) -> Arra
                 max_y = maxi(max_y, point.y)
 
                 for offset in neighbors:
-                    var next := point + offset
-                    if next.x < 0 or next.y < 0 or next.x >= width or next.y >= height:
+                    var next_point: Vector2i = point + offset
+                    if next_point.x < 0 or next_point.y < 0 or next_point.x >= width or next_point.y >= height:
                         continue
-                    var next_index := next.y * width + next.x
+                    var next_index: int = next_point.y * width + next_point.x
                     if visited[next_index] != 0:
                         continue
                     visited[next_index] = 1
-                    if image.get_pixel(next.x, next.y).a > alpha_threshold:
-                        stack.append(next)
+                    if image.get_pixel(next_point.x, next_point.y).a > alpha_threshold:
+                        stack.append(next_point)
 
             components.append({
                 "pixels": pixel_count,
