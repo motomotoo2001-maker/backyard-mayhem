@@ -34,6 +34,7 @@ func run() -> void:
     TestUtils.assert_true(float(tier_one.get("base_scale", 1.0)) > 1.0, "tier 1 should grow the base silhouette")
 
     var boss_state := runtime.snapshot()
+    boss_state["state"] = &"wave"
     boss_state["current_wave"] = 5
     boss_state["is_boss_wave"] = true
     boss_state["focus"] = &"finale"
