@@ -61,121 +61,86 @@
 - `enemy_asset_policy.gd` only accepts normalized single-frame PNGs under `assets/runtime/enemies/<family>/<action>/<action>_NN.png` for raccoon/cat/bulldog/pigeon/neighbor_kid/skateboard_teen/boss.
 - Concept/reference/user_pack/contact-sheet assets and unknown enemy families are rejected from runtime paths.
 - `enemy_frame_validator.gd` checks transparent frame margins, clipping, detached alpha debris/accidentally baked VFX and sequence ground-anchor drift while allowing each enemy family to choose its own canvas size.
-- Verified run `35889233857` on commit `eeca13875687b99d7289e90dd7801960c28eb700`: parser PASS, **10 test files / 0 failures**.
-- Verified run `35889870661` on commit `ef10149d378b625bb4eb62322bb501d1559a6e49`: parser PASS, **12 test files / 0 failures**.
-- Verified run `35890282608` on commit `e9c3b6afd5365b4929aa823033a5cb23808b1ab8`: parser PASS, **13 test files / 0 failures**.
 
 ### Raccoon production animation QA
 - Runtime canvas: **256×256**, stable ground anchor `(128, 236)`, horizontal flip allowed.
-- Canonical actions total **27 frames**:
-  - idle 4 @ 6 FPS loop
-  - run 8 @ 12 FPS loop
-  - attack 6 @ 12 FPS one-shot; hit event on frame 3
-  - hurt 3 @ 12 FPS one-shot
-  - death 6 @ 9 FPS one-shot
-- `raccoon_frame_manifest.gd` enforces exactly 27 runtime filenames under `assets/runtime/enemies/raccoon/<action>/`.
+- Canonical actions total **27 frames**: idle 4 @ 6 FPS loop; run 8 @ 12 FPS loop; attack 6 @ 12 FPS one-shot with hit frame 3; hurt 3 @ 12; death 6 @ 9.
+- `raccoon_frame_manifest.gd` enforces exactly 27 runtime filenames.
 - `raccoon_spriteframes_validator.gd` checks all five animations for frame counts, FPS, loop flags and missing textures.
 - Verified run `35905143315` on commit `bfb46623800da8abb6153e8fa7de7fe4f256ea6d`: Godot 4.7.2 parser PASS, **28 test files / 0 failures**.
 
 ### Cat production animation QA
 - Runtime canvas: **256×256**, stable ground anchor `(128, 238)`, horizontal flip allowed.
-- Cat intentionally reads faster than Raccoon; canonical actions total **27 frames**:
-  - idle 4 @ 7 FPS loop
-  - run 8 @ 14 FPS loop
-  - attack/pounce 6 @ 14 FPS one-shot; hit event on frame 3
-  - hurt 3 @ 13 FPS one-shot
-  - death 6 @ 10 FPS one-shot
-- `cat_frame_manifest.gd` enforces exactly 27 runtime filenames under `assets/runtime/enemies/cat/<action>/`.
-- `cat_spriteframes_validator.gd` checks all five Cat animations for frame counts, FPS, loop flags and missing textures.
+- Canonical actions total **27 frames**: idle 4 @ 7 FPS loop; run 8 @ 14 FPS; attack/pounce 6 @ 14 FPS one-shot with hit frame 3; hurt 3 @ 13; death 6 @ 10.
+- `cat_frame_manifest.gd` enforces exactly 27 runtime filenames.
+- `cat_spriteframes_validator.gd` validates all five Cat animations.
 - Verified run `35907817899` on commit `8930ba8dab73ce9df4aac22d41586c3446eaa015`: Godot 4.7.2 parser PASS, **31 test files / 0 failures**.
 
+### Bulldog production animation QA
+- Runtime canvas: **288×288**, stable ground anchor `(144, 268)`, horizontal flip allowed.
+- Canonical actions total **28 frames**:
+  - idle 4 @ 5 FPS loop
+  - run 8 @ 9 FPS loop
+  - attack 7 @ 10 FPS one-shot; heavy hit event on frame 4
+  - hurt 3 @ 9 FPS one-shot
+  - death 6 @ 8 FPS one-shot
+- `bulldog_frame_manifest.gd` enforces exactly 28 runtime filenames under `assets/runtime/enemies/bulldog/<action>/`.
+- `bulldog_spriteframes_validator.gd` checks all five Bulldog animations for frame counts, FPS, loop flags and missing textures.
+- Verified run `35909112144` on commit `dfbac2fc67486271fd98d4e87e6a3ee1b939e66b`: Godot 4.7.2 parser PASS, **34 test files / 0 failures**.
+
+### Pigeon production animation QA
+- Runtime canvas: **256×256**, stable flight anchor `(128, 156)`, horizontal flip allowed.
+- Canonical actions total **27 frames**:
+  - idle 4 @ 6 FPS loop
+  - fly 8 @ 12 FPS loop
+  - attack/bomb 6 @ 11 FPS one-shot; `bomb_release` event on frame 3
+  - hurt 3 @ 12 FPS one-shot
+  - death/fall 6 @ 9 FPS one-shot
+- `pigeon_frame_manifest.gd` enforces exactly 27 runtime filenames under `assets/runtime/enemies/pigeon/<action>/`.
+- `pigeon_spriteframes_validator.gd` checks all five Pigeon animations for frame counts, FPS, loop flags and missing textures.
+- Verified run `35909887761` on commit `7853934cb2c1fb361588cabdf406d7b5f9df09ea`: Godot 4.7.2 parser PASS, **37 test files / 0 failures**.
+
 ## Defense / base visual QA
-- `defense_visual_state_resolver.gd` standardizes defense/base health visuals: fresh > 66%, damaged <= 66%, critical <= 33%, broken at 0 HP.
-- Visual flags unify cracks, smoke, debris and Electric Fence overlay behavior across Chair/Hose/Sprinkler/base scenes.
-- `base_upgrade_visual_profile.gd` defines four visually distinct central-base tiers:
-  - tier 0: simple base, no turret socket
-  - tier 1: sandbags + 1 turret socket
-  - tier 2: armor + power cables + 2 turret sockets
-  - tier 3: beacon + power coils + 3 turret sockets
-- Base silhouette grows slightly per tier so progression is readable without HUD text.
-- Verified commit `1047c67f636bedc60919baf1bf5c4bcc768c662c`: Godot 4.7.2 parser PASS and defense/base tests GREEN.
+- `defense_visual_state_resolver.gd` standardizes fresh/damaged/critical/broken states plus cracks/smoke/debris/electric overlay.
+- `base_upgrade_visual_profile.gd` defines four visibly distinct central-base tiers with 0/1/2/3 turret sockets, sandbags, armor, cables, beacon and power coils.
 
 ## Combat/VFX QA
-- `combat_vfx_timing_profile.gd` synchronizes combat feedback to animation frames instead of loose timers:
-  - fire muzzle/recoil/air-blast on frame 1; recovery on frame 3.
-  - dash trail start/peak/end on frames 0/1/3.
-  - hurt impact/recovery on frames 0/2.
+- `combat_vfx_timing_profile.gd` synchronizes fire/dash/hurt feedback to animation frames.
 - `enemy_hit_feedback_profile.gd` defines standard/heavy/boss flash, hit-stop, knockback, shake and death-burst intensity.
-- `boss_telegraph_profile.gd` differentiates boss attacks:
-  - Heavy Swing: shorter windup, compact radius, 2 anticipation pulses.
-  - Radial Slam: longer windup, much larger danger radius, 3 pulses and heavier impact shake.
-- `water_vfx_asset_policy.gd` only allows canonical transparent runtime paths under `assets/runtime/vfx/water/<kind>/<kind>_NN.png` for stream/splash/impact/projectile/foam/vortex families; raw concept sheets and turret-baked effects are rejected.
-- `water_vfx_sequence_profile.gd` defines six canonical Water VFX sequences with fixed timing/origins:
-  - stream: 8 frames @ 12 FPS loop, fixed `nozzle_left` origin
-  - projectile: 4 @ 14 FPS loop
-  - splash: 6 @ 16 FPS one-shot
-  - impact: 5 @ 18 FPS one-shot
-  - foam: 6 @ 12 FPS one-shot
-  - vortex: 8 @ 14 FPS loop
-- `water_vfx_manifest.gd` enforces exactly **37** normalized runtime PNGs across those six families.
-- `water_vfx_spriteframes_validator.gd` validates all six Water VFX animations for frame count, FPS, loop flags and missing textures before runtime integration.
-- `visual_feedback_orchestrator.gd` exposes scene-ready snapshots for frame-synced hero combat cues, defense/base damage and upgrade visuals, boss telegraph/HUD data, and standard/heavy/boss enemy hit/death feedback.
-- Lethal enemy feedback requests the death animation plus the class-specific death burst; non-lethal feedback requests hurt while preserving class-specific flash, hit-stop, knockback and camera shake values.
-- Verified run `35889565334` on commit `6fd13a91d9bc2d28dcdbf2b73f18773c95922fc5`: parser PASS, **11 test files / 0 failures**.
-- Verified run `35896867038` on commit `4ef714ef8707c5b00101c3e47fc307ae5995121e`: parser PASS, **17 test files / 0 failures**.
-- Verified run `35902480910` on commit `101efdbe99a1097f1dec940267a1449dfe9a8f4e`: parser PASS, **22 test files / 0 failures**.
-- Verified run `35903154183` on commit `6ccab5d29724ab446b0ca87520d84fd159088915`: parser PASS, **23 test files / 0 failures**.
-- Verified run `35903527879` on commit `e6f22c0efb8a3b19cd2ed3e4cda22d1b9b8a3b48`: parser PASS, **24 test files / 0 failures**.
-- Verified run `35903950663` on commit `ce703e1659b687ea029d512af341f29cca782715`: parser PASS, **25 test files / 0 failures**.
+- `boss_telegraph_profile.gd` differentiates Heavy Swing and Radial Slam anticipation/impact.
+- `water_vfx_asset_policy.gd`, `water_vfx_sequence_profile.gd`, `water_vfx_manifest.gd`, and `water_vfx_spriteframes_validator.gd` define/validate **37 canonical Water VFX frames**.
+- `visual_feedback_orchestrator.gd` exposes scene-ready snapshots for hero cues, defense/base visuals, boss warning/HUD data and enemy hit/death feedback.
 
 ## HUD readability QA
-- `hud_readability_profile.gd` defines minimum readable card sizes for Dash, Health, Wave Transition, Upgrade Hint, Boss Warning and generic Status.
-- Warning priority is explicit: `boss_warning > critical_health > wave_transition > upgrade_hint > status`.
-- Low-priority status cannot cover a boss warning; at most 2 transient cards may occupy the playfield at once.
-- Verified run `35897158357` on commit `c2e3a8132f8620b81fe170f37c14688a5e8e9dab`: parser PASS, **18 test files / 0 failures**.
+- `hud_readability_profile.gd` defines minimum readable card sizes and explicit priority `boss_warning > critical_health > wave_transition > upgrade_hint > status`.
+- At most 2 transient cards may occupy the playfield at once.
 
 ## Five-wave gameplay progression QA
-- `wave_progression_profile.gd` defines the five-wave vertical-slice curve with rising threat budgets and non-decreasing rewards.
-- Wave 1 teaches Raccoon fundamentals; Wave 2 adds Cat speed pressure; Wave 3 adds Bulldog + Pigeon heavy/air pressure; Wave 4 adds Neighbor Kid + Skateboard Teen ranged/mobile pressure; Wave 5 mixes the roster and introduces the Boss.
-- Between-wave intermissions remain >= 8 seconds so the player can read upgrade choices.
-- Boss wave is explicitly marked and awards a milestone reward.
-- `between_wave_upgrade_profile.gd` guarantees three strategic lanes after waves 1–4: Hero, Base and Utility.
-- Hero pool includes Golden Slipper and Super Soaker; Base pool includes Electric Fence and fortification/turret options; Utility includes emergency repair/recovery options.
-- Each lane has a cost no higher than the reward of the just-completed wave; no upgrade shop is shown after the final boss.
-- Verified run `35897626344` on commit `9854ca0fc29af21ce2f2491f7618ad7aaa61b9c8`: parser PASS, **19 test files / 0 failures**.
-- Verified run `35897884980` on commit `d18cebaaa56502da51801e2d2510bca6cd862c4c`: parser PASS, **20 test files / 0 failures**.
-
-## Vertical-slice session runtime QA
-- `vertical_slice_session.gd` now orchestrates the actual run lifecycle: active wave -> reward -> intermission -> strategic upgrade -> next wave -> final victory.
-- Rewards are credited exactly once; repeating final completion cannot duplicate coins.
-- Intermissions expose the three established Hero/Base/Utility lanes and allow one strategic purchase before the next wave.
-- Purchased upgrades are tracked for the run; duplicate purchases are blocked.
-- `base_fortification` and `turret_socket` advance the visible base tier, capped at tier 3.
-- Intermissions may be skipped without purchasing; final victory cannot advance beyond wave 5 and shows no upgrade shop.
-- Verified run `35900490238` on commit `80c449effec08bb12e78cdb099b29bc58b212d4b`: Godot 4.7.2 parser PASS and full headless suite GREEN.
+- `wave_progression_profile.gd` defines the five-wave curve: Raccoon -> Cat -> Bulldog/Pigeon -> Neighbor Kid/Skateboard Teen -> mixed Boss finale.
+- `between_wave_upgrade_profile.gd` guarantees Hero/Base/Utility strategic lanes after waves 1–4.
+- `vertical_slice_session.gd` orchestrates wave -> reward -> intermission -> purchase -> next wave -> victory without duplicate rewards/upgrades.
 
 ## CI hardening
 - GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
 - `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
-- `tests/run_all.gd` rejects non-instantiable scripts with `Script.can_instantiate()` instead of hanging until timeout.
-- Earlier timing-test parse issue was traced to Godot 4.7.2 type inference; explicit float typing fixed it at the source.
+- `tests/run_all.gd` rejects non-instantiable scripts with `Script.can_instantiate()` instead of hanging.
 
 ## Visual audit findings
-- Several uploaded enemy/water sheets are good style references but are **concept sheets, not production atlases**.
-- Common defects to exclude from runtime assets: white backgrounds, labels, UI counters, mixed camera angles, baked speech bubbles/dust/VFX/shadows and inconsistent per-frame scale.
-- Water VFX runtime contract is complete; the next visual step is producing/normalizing the actual 37 transparent frames and assembling them into validated SpriteFrames.
-- Enemy production-contract status: **Raccoon complete, Cat complete; next Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss**.
+- Several uploaded enemy/water sheets are style references, not production atlases; runtime assets must exclude white backgrounds, labels, UI counters, mixed camera angles, baked speech bubbles/dust/VFX/shadows and inconsistent scale.
+- Water VFX contract is complete; actual 37 transparent frames still need production/normalization.
+- Enemy production-contract status: **Raccoon complete, Cat complete, Bulldog complete, Pigeon complete; next Neighbor Kid -> Skateboard Teen -> Boss**.
 
 ## Current priorities
-1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
-2. Integrate `vertical_slice_session.gd` and `visual_feedback_orchestrator.gd` plus verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
-3. Produce/normalize the **37 canonical Water VFX frames** and assemble validated SpriteFrames.
-4. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
-5. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact and enemy hit/death feedback.
-6. Continue enemy production contracts: **Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss**, then produce/normalize their actual runtime frames.
-7. Polish backyard composition and HUD readability.
-8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
-9. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
+1. Synchronize the real gameplay text tree from verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
+2. Integrate `vertical_slice_session.gd`, `visual_feedback_orchestrator.gd`, and verified defense/base/boss/HUD/wave profiles into real gameplay scenes after tree sync.
+3. Continue enemy production contracts: **Neighbor Kid -> Skateboard Teen -> Boss**.
+4. Produce/normalize the 37 canonical Water VFX frames and assemble validated SpriteFrames.
+5. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
+6. Integrate combat timing into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact and enemy hit/death feedback.
+7. Produce/normalize actual runtime enemy frames after contracts are complete.
+8. Polish backyard composition and HUD readability.
+9. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
+10. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
 
 ## New-chat recovery rule
 Read `CHECKPOINT.md`, `LATEST_SNAPSHOT.md`, and the development plan first. Restore the canonical Google Drive/Library ZIP if the local project is unavailable. Never guess which archive is current.
