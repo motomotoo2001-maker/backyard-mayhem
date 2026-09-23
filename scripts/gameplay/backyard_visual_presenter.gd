@@ -11,6 +11,11 @@ static func from_runtime(runtime_state: Dictionary) -> Dictionary:
 
     return {
         "base_level": int(base_visual.get("level", runtime_state.get("base_tier", 0))),
+        "base_health_state": String(base_visual.get("state", "fresh")),
+        "show_cracks": bool(base_visual.get("show_cracks", false)),
+        "show_smoke": bool(base_visual.get("show_smoke", false)),
+        "show_debris": bool(base_visual.get("show_debris", false)),
+        "show_electric": bool(base_visual.get("show_electric", false)),
         "turret_slots": int(base_visual.get("turret_slots", 0)),
         "show_sandbags": bool(base_visual.get("show_sandbags", false)),
         "show_armor": bool(base_visual.get("show_armor", false)),
