@@ -11,13 +11,15 @@
 - Compatibility candidate: Godot 4.8-dev6, validation only until the 4.7.2 build is fully green.
 - Project: Backyard Mayhem / Reference A.
 - Status: playable vertical slice.
-- Canonical snapshot: `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip`.
-- Library file id: `libfile_f66e181bea6c819181c8698135e95d4b`.
+- ChatGPT Library snapshot: `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip`.
+- Google Drive snapshot: `Backyard Mayhem/LATEST/BackyardMayhem_LATEST.zip`.
+- Current Google Drive file id: `15ZdOAJaLP216dY8QFPJkp8SON1vJFjgV`.
+- Current Google Drive snapshot size: 59,062,266 bytes.
 - Fresh clean upload verified on 2026-09-23: ZIP integrity PASS, `project.godot` at archive root, 1,842 files, 128 GDScript files, 36 scenes, 796 PNG assets, and 69 test scripts.
 - Previous verified SHA-256: `b1247f7b1df490f6051a7f8f006bc2454862695e1707de4d7ada823abd936f22` (older canonical snapshot; recompute after next full-game packaging pass).
 
 ## Important repository scope
-- The Library ZIP is the authoritative **full gameplay project** with scenes/scripts/assets/tests.
+- The Drive/Library ZIP is the authoritative **full gameplay project** with scenes/scripts/assets/tests.
 - GitHub `dev/backyard-vertical-slice` is currently a hardened **QA/bootstrap slice**.
 - Its green CI proves the QA/parser contracts below, not yet the entire full gameplay snapshot.
 - Highest-priority infrastructure task: synchronize the real text tree (`scripts/`, `scenes/`, `tests/`, `tools/`, `data/`, `project.godot`) from the verified clean ZIP, then run full-game CI.
@@ -63,21 +65,39 @@
 - Verified run `35889870661` on commit `ef10149d378b625bb4eb62322bb501d1559a6e49`: parser PASS, **12 test files / 0 failures**.
 - Verified run `35890282608` on commit `e9c3b6afd5365b4929aa823033a5cb23808b1ab8`: parser PASS, **13 test files / 0 failures**.
 
+## Defense / base visual QA
+- `defense_visual_state_resolver.gd` standardizes defense/base health visuals:
+  - fresh > 66%
+  - damaged <= 66%
+  - critical <= 33%
+  - broken at 0 HP
+- Visual flags unify cracks, smoke, debris and Electric Fence overlay behavior across Chair/Hose/Sprinkler/base scenes.
+- `base_upgrade_visual_profile.gd` defines four visually distinct central-base tiers:
+  - tier 0: simple base, no turret socket
+  - tier 1: sandbags + 1 turret socket
+  - tier 2: armor + power cables + 2 turret sockets
+  - tier 3: beacon + power coils + 3 turret sockets
+- Base silhouette grows slightly per tier so progression is readable without HUD text.
+- Verified commit `1047c67f636bedc60919baf1bf5c4bcc768c662c`: Godot 4.7.2 parser PASS and defense/base tests GREEN.
+
 ## Combat/VFX QA
 - `combat_vfx_timing_profile.gd` synchronizes combat feedback to animation frames instead of loose timers:
   - fire muzzle/recoil/air-blast on frame 1; recovery on frame 3.
   - dash trail start/peak/end on frames 0/1/3.
   - hurt impact/recovery on frames 0/2.
-- Test timing is derived from the canonical hero FPS profile, including Dash = 18 FPS.
+- `enemy_hit_feedback_profile.gd` defines standard/heavy/boss flash, hit-stop, knockback, shake and death-burst intensity.
+- `boss_telegraph_profile.gd` differentiates boss attacks:
+  - Heavy Swing: shorter windup, compact radius, 2 anticipation pulses.
+  - Radial Slam: longer windup, much larger danger radius, 3 pulses and heavier impact shake.
 - `water_vfx_asset_policy.gd` only allows canonical transparent runtime paths under `assets/runtime/vfx/water/<kind>/<kind>_NN.png` for stream/splash/impact/projectile/foam/vortex families; raw concept sheets and turret-baked effects are rejected.
 - Verified run `35889565334` on commit `6fd13a91d9bc2d28dcdbf2b73f18773c95922fc5`: parser PASS, **11 test files / 0 failures**.
+- Verified run `35896867038` on commit `4ef714ef8707c5b00101c3e47fc307ae5995121e`: parser PASS, **17 test files / 0 failures**.
 
 ## CI hardening
 - GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
 - `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
 - `tests/run_all.gd` rejects non-instantiable scripts with `Script.can_instantiate()` instead of hanging until timeout.
 - Earlier timing-test parse issue was traced to Godot 4.7.2 type inference; explicit float typing fixed it at the source.
-- Verified run `35888694500` on commit `6b967ed061fbdbbf344d47627df9ba004d377692`: parser PASS, **9 test files / 0 failures**.
 
 ## Visual audit findings
 - Several uploaded enemy/water sheets are good style references but are **concept sheets, not production atlases**.
@@ -86,14 +106,15 @@
 - Enemy priority for normalized runtime animation: Raccoon -> Cat -> Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss.
 
 ## Current priorities
-1. Synchronize the real gameplay text tree from the newly verified clean `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
-2. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
-3. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
-4. Normalize Water VFX into transparent strips with fixed origins/anchors.
-5. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
-6. Polish tower/building upgrade visuals, backyard composition and HUD readability.
-7. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
-8. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, checkpoint/tag after the full-game gate is green.
+1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
+2. Integrate the verified defense/base/boss profiles into the real gameplay scenes after tree sync.
+3. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
+4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
+5. Normalize Water VFX into transparent strips with fixed origins/anchors.
+6. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
+7. Polish backyard composition and HUD readability.
+8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
+9. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
 
 ## New-chat recovery rule
-Read `CHECKPOINT.md`, `LATEST_SNAPSHOT.md`, and the development plan first. Restore the canonical ZIP if the local project is unavailable. Never guess which archive is current.
+Read `CHECKPOINT.md`, `LATEST_SNAPSHOT.md`, and the development plan first. Restore the canonical Google Drive/Library ZIP if the local project is unavailable. Never guess which archive is current.
