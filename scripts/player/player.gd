@@ -107,14 +107,20 @@ func _update_animation(input_direction: Vector2) -> void:
         return
     if _action_animation != &"" and sprite.animation == _action_animation and sprite.is_playing():
         return
-    var desired_state: StringName = &"idle"
-    if _building:
-        desired_state = &"build"
-    elif input_direction.length_squared() > 0.001:
-        desired_state = &"run"
+    var desired_state := _select_animation_state(input_direction)
     var desired := _resolve_animation_name(desired_state, input_direction)
     if sprite.animation != desired or not sprite.is_playing():
         sprite.play(desired)
+
+func _select_animation_state(input_direction: Vector2) -> StringName:
+    if dash_component != null and is_instance_valid(dash_component) and dash_component.has_method("is_active"):
+        if bool(dash_component.call("is_active")):
+            return &"dash"
+    if _building:
+        return &"build"
+    if input_direction.length_squared() > 0.001:
+        return &"run"
+    return &"idle"
 
 func _on_weapon_shot_fired(_projectile) -> void:
     if _building or _incapacitated or animated_sprite == null:
@@ -206,6 +212,16 @@ func _resolve_animation_name(base_state: StringName, input_direction: Vector2) -
     var directional_name := StringName("%s_%s" % [String(base_state), direction_suffix])
     if sprite.sprite_frames.has_animation(directional_name):
         return directional_name
+    if sprite.sprite_frames.has_animation(base_state):
+        return base_state
+
+    if base_state == &"dash":
+        var directional_run := StringName("run_%s" % direction_suffix)
+        if sprite.sprite_frames.has_animation(directional_run):
+            return directional_run
+        if sprite.sprite_frames.has_animation(&"run"):
+            return &"run"
+
     return base_state
 
 func _resolve_direction_suffix(base_state: StringName, input_direction: Vector2) -> String:
