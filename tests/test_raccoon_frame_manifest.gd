@@ -41,5 +41,5 @@ func run() -> void:
     TestUtils.assert_eq(paths.size(), names.size(), "every raccoon filename should have one runtime path")
     for runtime_path_variant in paths:
         var runtime_path := String(runtime_path_variant)
-        TestUtils.assert_true(EnemyPolicy.is_valid_runtime_path(runtime_path), "raccoon manifest path must satisfy enemy asset policy: %s" % runtime_path)
+        TestUtils.assert_true(EnemyPolicy.is_valid_runtime_frame_path(runtime_path), "raccoon manifest path must satisfy enemy asset policy: %s" % runtime_path)
         TestUtils.assert_true(runtime_path.begins_with("res://assets/runtime/enemies/raccoon/"), "raccoon path must stay inside raccoon runtime folder")
