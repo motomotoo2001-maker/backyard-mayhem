@@ -86,11 +86,23 @@
   - Heavy Swing: shorter windup, compact radius, 2 anticipation pulses.
   - Radial Slam: longer windup, much larger danger radius, 3 pulses and heavier impact shake.
 - `water_vfx_asset_policy.gd` only allows canonical transparent runtime paths under `assets/runtime/vfx/water/<kind>/<kind>_NN.png` for stream/splash/impact/projectile/foam/vortex families; raw concept sheets and turret-baked effects are rejected.
-- `visual_feedback_orchestrator.gd` now exposes scene-ready snapshots for frame-synced hero combat cues, defense/base damage and upgrade visuals, boss telegraph/HUD data, and standard/heavy/boss enemy hit/death feedback.
+- `water_vfx_sequence_profile.gd` defines six canonical Water VFX sequences with fixed timing/origins:
+  - stream: 8 frames @ 12 FPS loop, fixed `nozzle_left` origin
+  - projectile: 4 @ 14 FPS loop
+  - splash: 6 @ 16 FPS one-shot
+  - impact: 5 @ 18 FPS one-shot
+  - foam: 6 @ 12 FPS one-shot
+  - vortex: 8 @ 14 FPS loop
+- `water_vfx_manifest.gd` enforces exactly **37** normalized runtime PNGs across those six families.
+- `water_vfx_spriteframes_validator.gd` validates all six Water VFX animations for frame count, FPS, loop flags and missing textures before runtime integration.
+- `visual_feedback_orchestrator.gd` exposes scene-ready snapshots for frame-synced hero combat cues, defense/base damage and upgrade visuals, boss telegraph/HUD data, and standard/heavy/boss enemy hit/death feedback.
 - Lethal enemy feedback requests the death animation plus the class-specific death burst; non-lethal feedback requests hurt while preserving class-specific flash, hit-stop, knockback and camera shake values.
 - Verified run `35889565334` on commit `6fd13a91d9bc2d28dcdbf2b73f18773c95922fc5`: parser PASS, **11 test files / 0 failures**.
 - Verified run `35896867038` on commit `4ef714ef8707c5b00101c3e47fc307ae5995121e`: parser PASS, **17 test files / 0 failures**.
 - Verified run `35902480910` on commit `101efdbe99a1097f1dec940267a1449dfe9a8f4e`: parser PASS, **22 test files / 0 failures**.
+- Verified run `35903154183` on commit `6ccab5d29724ab446b0ca87520d84fd159088915`: parser PASS, **23 test files / 0 failures**.
+- Verified run `35903527879` on commit `e6f22c0efb8a3b19cd2ed3e4cda22d1b9b8a3b48`: parser PASS, **24 test files / 0 failures**.
+- Verified run `35903950663` on commit `ce703e1659b687ea029d512af341f29cca782715`: parser PASS, **25 test files / 0 failures**.
 
 ## HUD readability QA
 - `hud_readability_profile.gd` defines minimum readable card sizes for Dash, Health, Wave Transition, Upgrade Hint, Boss Warning and generic Status.
@@ -127,15 +139,15 @@
 ## Visual audit findings
 - Several uploaded enemy/water sheets are good style references but are **concept sheets, not production atlases**.
 - Common defects to exclude from runtime assets: white backgrounds, labels, UI counters, mixed camera angles, baked speech bubbles/dust/VFX/shadows and inconsistent per-frame scale.
-- Water VFX should be normalized into separate transparent assets: stream, projectile, splash/impact, foam/droplets, vortex/super attack.
+- Water VFX runtime contract is now complete; the next visual step is producing/normalizing the actual 37 transparent frames and assembling them into validated SpriteFrames.
 - Enemy priority for normalized runtime animation: Raccoon -> Cat -> Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss.
 
 ## Current priorities
 1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
 2. Integrate `vertical_slice_session.gd` and `visual_feedback_orchestrator.gd` plus verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
-3. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
-4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact and enemy hit/death feedback.
-5. Normalize Water VFX into transparent strips with fixed origins/anchors and canonical sequence timing.
+3. Produce/normalize the **37 canonical Water VFX frames** and assemble validated SpriteFrames.
+4. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
+5. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact and enemy hit/death feedback.
 6. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
 7. Polish backyard composition and HUD readability.
 8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
