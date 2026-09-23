@@ -20,8 +20,20 @@ func run() -> void:
         "BaseVisual/TurretSocket1",
         "BaseVisual/TurretSocket2",
         "BaseVisual/TurretSocket3",
+        "BaseVisual/Cracks",
+        "BaseVisual/Smoke",
+        "BaseVisual/Debris",
+        "BaseVisual/ElectricOverlay",
         "BootstrapUI/BossAlert",
+        "BootstrapUI/BaseHealthBar",
+        "BootstrapUI/BaseHealthBar/Fill",
+        "BootstrapUI/BaseHealthBar/Label",
     ]
     for node_path in required:
         TestUtils.assert_true(scene.has_node(node_path), "backyard preview must contain %s" % node_path)
+
+    TestUtils.assert_true(not (scene.get_node("BaseVisual/Cracks") as CanvasItem).visible, "cracks should start hidden")
+    TestUtils.assert_true(not (scene.get_node("BaseVisual/Smoke") as CanvasItem).visible, "smoke should start hidden")
+    TestUtils.assert_true(not (scene.get_node("BaseVisual/Debris") as CanvasItem).visible, "debris should start hidden")
+    TestUtils.assert_true(not (scene.get_node("BaseVisual/ElectricOverlay") as CanvasItem).visible, "electric overlay should start hidden")
     scene.free()
