@@ -89,6 +89,63 @@ position = Vector2(58, -26)
 polygon = PackedVector2Array(-13, 0, 0, -9, 13, 0, 0, 9)
 color = Color(0.78, 0.68, 0.32, 1)
 
+[node name="Cracks" type="Node2D" parent="BaseVisual"]
+visible = false
+
+[node name="Left" type="Line2D" parent="BaseVisual/Cracks"]
+points = PackedVector2Array(-54, -30, -38, -14, -48, 2, -29, 20)
+width = 4.0
+default_color = Color(0.08, 0.07, 0.07, 0.9)
+
+[node name="Right" type="Line2D" parent="BaseVisual/Cracks"]
+points = PackedVector2Array(45, -28, 30, -8, 45, 10, 27, 30)
+width = 4.0
+default_color = Color(0.08, 0.07, 0.07, 0.9)
+
+[node name="Smoke" type="Node2D" parent="BaseVisual"]
+visible = false
+position = Vector2(18, -64)
+
+[node name="Puff1" type="Polygon2D" parent="BaseVisual/Smoke"]
+polygon = PackedVector2Array(-22, 8, -16, -8, 0, -14, 14, -6, 18, 10, 4, 20, -12, 18)
+color = Color(0.22, 0.24, 0.25, 0.72)
+
+[node name="Puff2" type="Polygon2D" parent="BaseVisual/Smoke"]
+position = Vector2(14, -18)
+polygon = PackedVector2Array(-18, 7, -13, -8, 0, -13, 13, -5, 15, 9, 2, 17, -11, 15)
+color = Color(0.29, 0.31, 0.32, 0.56)
+
+[node name="Debris" type="Node2D" parent="BaseVisual"]
+visible = false
+
+[node name="Chunk1" type="Polygon2D" parent="BaseVisual/Debris"]
+position = Vector2(-82, 56)
+polygon = PackedVector2Array(-9, -6, 8, -8, 12, 5, -5, 10)
+color = Color(0.34, 0.25, 0.2, 1)
+
+[node name="Chunk2" type="Polygon2D" parent="BaseVisual/Debris"]
+position = Vector2(78, 61)
+polygon = PackedVector2Array(-7, -8, 9, -4, 6, 9, -10, 6)
+color = Color(0.3, 0.24, 0.2, 1)
+
+[node name="Chunk3" type="Polygon2D" parent="BaseVisual/Debris"]
+position = Vector2(14, 74)
+polygon = PackedVector2Array(-8, -5, 7, -7, 10, 5, -6, 9)
+color = Color(0.4, 0.31, 0.23, 1)
+
+[node name="ElectricOverlay" type="Node2D" parent="BaseVisual"]
+visible = false
+
+[node name="ArcLeft" type="Line2D" parent="BaseVisual/ElectricOverlay"]
+points = PackedVector2Array(-86, -8, -62, -22, -40, -4, -20, -28)
+width = 3.0
+default_color = Color(0.32, 0.9, 1, 0.95)
+
+[node name="ArcRight" type="Line2D" parent="BaseVisual/ElectricOverlay"]
+points = PackedVector2Array(18, -32, 38, -10, 62, -26, 84, -4)
+width = 3.0
+default_color = Color(0.32, 0.9, 1, 0.95)
+
 [node name="BootstrapUI" type="CanvasLayer" parent="."]
 
 [node name="BossAlert" type="ColorRect" parent="BootstrapUI"]
@@ -108,6 +165,34 @@ offset_right = 380.0
 offset_bottom = 50.0
 theme_override_font_sizes/font_size = 20
 text = "BOSS WAVE — WATCH THE TELEGRAPHS"
+horizontal_alignment = 1
+
+[node name="BaseHealthBar" type="ColorRect" parent="BootstrapUI"]
+offset_left = 872.0
+offset_top = 96.0
+offset_right = 1224.0
+offset_bottom = 144.0
+color = Color(0.035, 0.055, 0.065, 0.92)
+mouse_filter = 2
+
+[node name="Fill" type="ColorRect" parent="BootstrapUI/BaseHealthBar"]
+layout_mode = 0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 348.0
+offset_bottom = 44.0
+color = Color(0.28, 0.72, 0.34, 0.95)
+mouse_filter = 2
+
+[node name="Label" type="Label" parent="BootstrapUI/BaseHealthBar"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 342.0
+offset_bottom = 38.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 17
+text = "BASE HP 100 / 100"
 horizontal_alignment = 1
 
 [node name="Header" type="ColorRect" parent="BootstrapUI"]
@@ -159,13 +244,13 @@ offset_right = 720.0
 offset_bottom = 490.0
 theme_override_colors/font_color = Color(0.88, 0.92, 0.86, 1)
 theme_override_font_sizes/font_size = 20
-text = "COINS 0    BASE TIER 0\nTHREAT 10    FUNDAMENTALS"
+text = "COINS 0    BASE TIER 0\nBASE HP 100 / 100\nTHREAT 10    FUNDAMENTALS"
 
 [node name="Footer" type="Label" parent="BootstrapUI"]
 offset_left = 48.0
-offset_top = 660.0
-offset_right = 1040.0
-offset_bottom = 700.0
+offset_top = 654.0
+offset_right = 1210.0
+offset_bottom = 704.0
 theme_override_colors/font_color = Color(0.68, 0.72, 0.68, 1)
 theme_override_font_sizes/font_size = 15
-text = "SPACE: complete/start wave    1/2/3: buy upgrade    R: reset preview"
+text = "SPACE: complete/start wave    1/2/3: upgrade    D: damage base    H: repair    R: reset"
