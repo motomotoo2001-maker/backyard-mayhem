@@ -28,16 +28,25 @@
 - Water/projectile/dust/XP/coin VFX
 - Five-wave / builder / visual / performance test suite
 
+## Hero animation QA — current verified state
+- Canonical hero profile now defines all 8 directions and 280 required frames.
+- Runtime frame standard: 320x320, top margin >= 18 px, bottom >= 12 px, sides >= 8 px.
+- Hero frame validator now rejects large detached alpha islands such as label fragments, neighboring-frame debris and accidentally baked VFX while tolerating tiny antialias/export specks.
+- GitHub Actions now treats Godot `SCRIPT ERROR`, `Parse Error`, and failed script loads as hard CI failures even if Godot returns exit code 0.
+- Verified on Godot 4.7.2 at commit `7e6682cfce0e9f7cb0716776f730bb83087af92f`: editor parse gate PASS; `TEST SUMMARY: 3 test files, 0 failures`; no hidden script/parse errors.
+
 ## Current hero art task
-- Root cause of bad slicing identified: old movement sheet clips head/feet in several directions and can include extra artifacts.
-- Production standard: 320x320 transparent frames, common ground anchor, safe margins, no labels, no white fringe, no neighboring-frame debris.
+- Root cause of bad slicing identified: old movement sheet clips head/feet in several directions and source sheets can contain labels/white backgrounds/decorative debris.
+- Clean 8-direction rotation sheet is the visual identity/silhouette reference, not a runtime atlas.
+- Production standard: transparent normalized frames, common ground anchor, no labels, no white fringe, no neighboring-frame debris.
 - Continue cleaning/replacing idle/run/fire/build/hurt/dash/death in 8 directions.
 
 ## Next
-1. Finish hero animation replacement and re-run hero contracts.
-2. Combat animation and VFX polish.
-3. Enemy animation readability / hit reactions / death feedback.
-4. Wave and upgrade balance polish.
+1. Add full 280-frame hero manifest validation (names/counts/directions/actions).
+2. Finish hero animation replacement and run frame validator over the real runtime set.
+3. Combat animation and VFX polish.
+4. Enemy animation readability / hit reactions / death feedback.
+5. Wave and upgrade balance polish.
 
 ## New-chat recovery rule
 Read `CHECKPOINT.md` and `LATEST_SNAPSHOT.md` first. If local files are unavailable or ambiguous, restore `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip` and verify its SHA-256 before continuing. Never guess which archive is current.
