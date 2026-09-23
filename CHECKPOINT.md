@@ -66,11 +66,7 @@
 - Verified run `35890282608` on commit `e9c3b6afd5365b4929aa823033a5cb23808b1ab8`: parser PASS, **13 test files / 0 failures**.
 
 ## Defense / base visual QA
-- `defense_visual_state_resolver.gd` standardizes defense/base health visuals:
-  - fresh > 66%
-  - damaged <= 66%
-  - critical <= 33%
-  - broken at 0 HP
+- `defense_visual_state_resolver.gd` standardizes defense/base health visuals: fresh > 66%, damaged <= 66%, critical <= 33%, broken at 0 HP.
 - Visual flags unify cracks, smoke, debris and Electric Fence overlay behavior across Chair/Hose/Sprinkler/base scenes.
 - `base_upgrade_visual_profile.gd` defines four visually distinct central-base tiers:
   - tier 0: simple base, no turret socket
@@ -93,6 +89,12 @@
 - Verified run `35889565334` on commit `6fd13a91d9bc2d28dcdbf2b73f18773c95922fc5`: parser PASS, **11 test files / 0 failures**.
 - Verified run `35896867038` on commit `4ef714ef8707c5b00101c3e47fc307ae5995121e`: parser PASS, **17 test files / 0 failures**.
 
+## HUD readability QA
+- `hud_readability_profile.gd` defines minimum readable card sizes for Dash, Health, Wave Transition, Upgrade Hint, Boss Warning and generic Status.
+- Warning priority is explicit: `boss_warning > critical_health > wave_transition > upgrade_hint > status`.
+- Low-priority status cannot cover a boss warning; at most 2 transient cards may occupy the playfield at once.
+- Verified run `35897158357` on commit `c2e3a8132f8620b81fe170f37c14688a5e8e9dab`: parser PASS, **18 test files / 0 failures**.
+
 ## CI hardening
 - GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
 - `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
@@ -107,14 +109,15 @@
 
 ## Current priorities
 1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
-2. Integrate the verified defense/base/boss profiles into the real gameplay scenes after tree sync.
-3. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
-4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
-5. Normalize Water VFX into transparent strips with fixed origins/anchors.
-6. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
-7. Polish backyard composition and HUD readability.
-8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
-9. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
+2. Integrate verified defense/base/boss/HUD profiles into the real gameplay scenes after tree sync.
+3. Improve five-wave progression and between-wave hero/base upgrade choices.
+4. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
+5. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
+6. Normalize Water VFX into transparent strips with fixed origins/anchors.
+7. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
+8. Polish backyard composition and HUD readability.
+9. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
+10. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
 
 ## New-chat recovery rule
 Read `CHECKPOINT.md`, `LATEST_SNAPSHOT.md`, and the development plan first. Restore the canonical Google Drive/Library ZIP if the local project is unavailable. Never guess which archive is current.
