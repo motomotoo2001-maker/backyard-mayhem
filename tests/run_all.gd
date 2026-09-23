@@ -12,16 +12,31 @@ func _initialize() -> void:
             continue
         if file_name == "test_utils.gd":
             continue
-        var script := load("res://tests/%s" % file_name)
-        if script == null:
+
+        var script_resource = load("res://tests/%s" % file_name)
+        if script_resource == null:
             TestUtils.failures.append("Could not load %s" % file_name)
             continue
+        if not script_resource is Script:
+            TestUtils.failures.append("%s did not load as Script" % file_name)
+            continue
+
+        var script: Script = script_resource as Script
+        if not script.can_instantiate():
+            TestUtils.failures.append("%s cannot instantiate (likely parse/load error)" % file_name)
+            continue
+
         var test_case = script.new()
+        if test_case == null:
+            TestUtils.failures.append("Could not instantiate %s" % file_name)
+            continue
         if not test_case.has_method("run"):
             TestUtils.failures.append("%s has no run()" % file_name)
             continue
+
         executed += 1
         test_case.run()
+
     for failure in TestUtils.failures:
         printerr("FAIL: %s" % failure)
     print("TEST SUMMARY: %d test files, %d failures" % [executed, TestUtils.failures.size()])
