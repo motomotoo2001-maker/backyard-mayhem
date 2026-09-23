@@ -1,0 +1,6 @@
+.godot/
+*.gd.uid
+*.tmp
+*.log
+backups/
+Backups/
