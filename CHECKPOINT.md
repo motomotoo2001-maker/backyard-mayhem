@@ -95,6 +95,17 @@
 - Low-priority status cannot cover a boss warning; at most 2 transient cards may occupy the playfield at once.
 - Verified run `35897158357` on commit `c2e3a8132f8620b81fe170f37c14688a5e8e9dab`: parser PASS, **18 test files / 0 failures**.
 
+## Five-wave gameplay progression QA
+- `wave_progression_profile.gd` defines the five-wave vertical-slice curve with rising threat budgets and non-decreasing rewards.
+- Wave 1 teaches Raccoon fundamentals; Wave 2 adds Cat speed pressure; Wave 3 adds Bulldog + Pigeon heavy/air pressure; Wave 4 adds Neighbor Kid + Skateboard Teen ranged/mobile pressure; Wave 5 mixes the roster and introduces the Boss.
+- Between-wave intermissions remain >= 8 seconds so the player can read upgrade choices.
+- Boss wave is explicitly marked and awards a milestone reward.
+- `between_wave_upgrade_profile.gd` guarantees three strategic lanes after waves 1–4: Hero, Base and Utility.
+- Hero pool includes Golden Slipper and Super Soaker; Base pool includes Electric Fence and fortification/turret options; Utility includes emergency repair/recovery options.
+- Each lane has a cost no higher than the reward of the just-completed wave; no upgrade shop is shown after the final boss.
+- Verified run `35897626344` on commit `9854ca0fc29af21ce2f2491f7618ad7aaa61b9c8`: parser PASS, **19 test files / 0 failures**.
+- Verified run `35897884980` on commit `d18cebaaa56502da51801e2d2510bca6cd862c4c`: parser PASS, **20 test files / 0 failures**.
+
 ## CI hardening
 - GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
 - `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
@@ -109,15 +120,14 @@
 
 ## Current priorities
 1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
-2. Integrate verified defense/base/boss/HUD profiles into the real gameplay scenes after tree sync.
-3. Improve five-wave progression and between-wave hero/base upgrade choices.
-4. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
-5. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
-6. Normalize Water VFX into transparent strips with fixed origins/anchors.
-7. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
-8. Polish backyard composition and HUD readability.
-9. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
-10. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
+2. Integrate verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
+3. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
+4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
+5. Normalize Water VFX into transparent strips with fixed origins/anchors.
+6. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
+7. Polish backyard composition and HUD readability.
+8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
+9. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
 
 ## New-chat recovery rule
 Read `CHECKPOINT.md`, `LATEST_SNAPSHOT.md`, and the development plan first. Restore the canonical Google Drive/Library ZIP if the local project is unavailable. Never guess which archive is current.
