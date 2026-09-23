@@ -26,7 +26,7 @@ func run() -> void:
     TestUtils.assert_true(not Profile.has_event(&"idle", &"muzzle"), "invalid action/event pair is rejected")
     TestUtils.assert_eq(Profile.event_frame(&"idle", &"muzzle"), -1, "invalid event frame returns -1")
 
-    var muzzle_time := Profile.event_time_seconds(&"fire", &"muzzle")
+    var muzzle_time: float = float(Profile.event_time_seconds(&"fire", &"muzzle"))
     TestUtils.assert_true(absf(muzzle_time - (1.0 / 14.0)) < 0.0001, "muzzle timing derives from fire FPS")
-    var dash_peak_time := Profile.event_time_seconds(&"dash", &"trail_peak")
+    var dash_peak_time: float = float(Profile.event_time_seconds(&"dash", &"trail_peak"))
     TestUtils.assert_true(absf(dash_peak_time - (1.0 / 18.0)) < 0.0001, "dash trail timing derives from canonical dash FPS")
