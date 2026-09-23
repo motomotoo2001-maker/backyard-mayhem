@@ -6,6 +6,8 @@ const DEFAULT_TOP_MARGIN := 18
 const DEFAULT_BOTTOM_MARGIN := 12
 const DEFAULT_SIDE_MARGIN := 8
 const DEFAULT_ALPHA_THRESHOLD := 0.02
+const DEFAULT_MAX_DETACHED_COMPONENT_PIXELS := 8
+const DEFAULT_DETACHED_GUARD_PADDING := 6
 
 static func validate_image(
     image: Image,
@@ -13,7 +15,9 @@ static func validate_image(
     top_margin: int = DEFAULT_TOP_MARGIN,
     bottom_margin: int = DEFAULT_BOTTOM_MARGIN,
     side_margin: int = DEFAULT_SIDE_MARGIN,
-    alpha_threshold: float = DEFAULT_ALPHA_THRESHOLD
+    alpha_threshold: float = DEFAULT_ALPHA_THRESHOLD,
+    max_detached_component_pixels: int = DEFAULT_MAX_DETACHED_COMPONENT_PIXELS,
+    detached_guard_padding: int = DEFAULT_DETACHED_GUARD_PADDING
 ) -> Dictionary:
     var errors: Array[String] = []
     if image == null:
@@ -44,6 +48,42 @@ static func validate_image(
     if right < side_margin:
         errors.append("right_margin_too_small")
 
+    # Runtime hero sprites should contain one primary character silhouette.
+    # Small isolated export/antialias specks are tolerated, but larger islands
+    # sitting away from the character usually mean labels, crop debris, or a
+    # projectile/VFX element was accidentally baked into the frame.
+    var components: Array = _find_alpha_components(image, alpha_threshold)
+    var detached_pixels := 0
+    var detached_components := 0
+    if components.size() > 1:
+        var main_index := 0
+        var main_pixels := int(components[0].get("pixels", 0))
+        for index in range(1, components.size()):
+            var pixels := int(components[index].get("pixels", 0))
+            if pixels > main_pixels:
+                main_pixels = pixels
+                main_index = index
+
+        var main_bounds: Rect2i = components[main_index].get("bounds", Rect2i())
+        var guard := Vector2i(detached_guard_padding, detached_guard_padding)
+        var guarded_main := Rect2i(
+            main_bounds.position - guard,
+            main_bounds.size + guard * 2
+        )
+
+        for index in range(components.size()):
+            if index == main_index:
+                continue
+            var component: Dictionary = components[index]
+            var pixels := int(component.get("pixels", 0))
+            var component_bounds: Rect2i = component.get("bounds", Rect2i())
+            detached_pixels += pixels
+            if pixels > max_detached_component_pixels and not guarded_main.intersects(component_bounds):
+                detached_components += 1
+
+        if detached_components > 0:
+            errors.append("detached_alpha_artifact")
+
     return {
         "ok": errors.is_empty(),
         "errors": errors,
@@ -54,6 +94,9 @@ static func validate_image(
             "left": left,
             "right": right,
         },
+        "component_count": components.size(),
+        "detached_component_count": detached_components,
+        "detached_pixel_count": detached_pixels,
     }
 
 static func validate_sequence(images: Array, max_anchor_drift: int = 3) -> Dictionary:
@@ -101,3 +144,58 @@ static func _find_alpha_bounds(image: Image, alpha_threshold: float) -> Dictiona
         "found": true,
         "bounds": Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1),
     }
+
+static func _find_alpha_components(image: Image, alpha_threshold: float) -> Array:
+    var width := image.get_width()
+    var height := image.get_height()
+    var visited := PackedByteArray()
+    visited.resize(width * height)
+    var components: Array = []
+    var neighbors := [
+        Vector2i(1, 0),
+        Vector2i(-1, 0),
+        Vector2i(0, 1),
+        Vector2i(0, -1),
+    ]
+
+    for y in range(height):
+        for x in range(width):
+            var start_index := y * width + x
+            if visited[start_index] != 0:
+                continue
+            visited[start_index] = 1
+            if image.get_pixel(x, y).a <= alpha_threshold:
+                continue
+
+            var stack: Array[Vector2i] = [Vector2i(x, y)]
+            var pixel_count := 0
+            var min_x := x
+            var min_y := y
+            var max_x := x
+            var max_y := y
+
+            while not stack.is_empty():
+                var point: Vector2i = stack.pop_back()
+                pixel_count += 1
+                min_x = mini(min_x, point.x)
+                min_y = mini(min_y, point.y)
+                max_x = maxi(max_x, point.x)
+                max_y = maxi(max_y, point.y)
+
+                for offset in neighbors:
+                    var next := point + offset
+                    if next.x < 0 or next.y < 0 or next.x >= width or next.y >= height:
+                        continue
+                    var next_index := next.y * width + next.x
+                    if visited[next_index] != 0:
+                        continue
+                    visited[next_index] = 1
+                    if image.get_pixel(next.x, next.y).a > alpha_threshold:
+                        stack.append(next)
+
+            components.append({
+                "pixels": pixel_count,
+                "bounds": Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1),
+            })
+
+    return components
