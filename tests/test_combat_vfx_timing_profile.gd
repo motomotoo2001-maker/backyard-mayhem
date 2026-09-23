@@ -29,4 +29,4 @@ func run() -> void:
     var muzzle_time := Profile.event_time_seconds(&"fire", &"muzzle")
     TestUtils.assert_true(absf(muzzle_time - (1.0 / 14.0)) < 0.0001, "muzzle timing derives from fire FPS")
     var dash_peak_time := Profile.event_time_seconds(&"dash", &"trail_peak")
-    TestUtils.assert_true(absf(dash_peak_time - (1.0 / 17.0)) < 0.0001, "dash trail timing derives from dash FPS")
+    TestUtils.assert_true(absf(dash_peak_time - (1.0 / 18.0)) < 0.0001, "dash trail timing derives from canonical dash FPS")
