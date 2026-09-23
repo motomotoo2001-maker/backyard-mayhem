@@ -6,6 +6,7 @@ const DefenseVisuals = preload("res://scripts/art/defense_visual_state_resolver.
 const BaseVisuals = preload("res://scripts/art/base_upgrade_visual_profile.gd")
 const BossTelegraphs = preload("res://scripts/art/boss_telegraph_profile.gd")
 const HUDProfile = preload("res://scripts/art/hud_readability_profile.gd")
+const EnemyHitFeedback = preload("res://scripts/art/enemy_hit_feedback_profile.gd")
 
 static func hero_frame_events(action: StringName, frame: int) -> Array[StringName]:
     var result: Array[StringName] = []
@@ -46,4 +47,11 @@ static func boss_telegraph_snapshot(attack: StringName) -> Dictionary:
     result["hud_kind"] = &"boss_warning"
     result["card_min_size"] = HUDProfile.card_min_size(&"boss_warning")
     result["hud_priority"] = HUDProfile.priority(&"boss_warning")
+    return result
+
+static func enemy_hit_snapshot(enemy_class: StringName, lethal: bool = false) -> Dictionary:
+    var result: Dictionary = EnemyHitFeedback.profile(enemy_class)
+    result["animation"] = &"death" if lethal else &"hurt"
+    result["play_death_burst"] = lethal
+    result["lethal"] = lethal
     return result
