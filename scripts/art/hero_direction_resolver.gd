@@ -1,7 +1,7 @@
 class_name HeroDirectionResolver
 extends RefCounted
 
-const VALID_DIRECTIONS: PackedStringArray = PackedStringArray([
+const VALID_DIRECTIONS := [
     "right",
     "front_right",
     "front",
@@ -10,7 +10,7 @@ const VALID_DIRECTIONS: PackedStringArray = PackedStringArray([
     "back_left",
     "back",
     "back_right",
-])
+]
 
 const DIRECTION_CENTERS := {
     "right": 0.0,
@@ -31,12 +31,12 @@ static func resolve(
     deadzone: float = 0.15,
     hysteresis_degrees: float = 6.0
 ) -> String:
-    var previous := previous_direction if VALID_DIRECTIONS.has(previous_direction) else "front"
+    var previous: String = previous_direction if VALID_DIRECTIONS.has(previous_direction) else "front"
     if vector.length() < maxf(deadzone, 0.0):
         return previous
 
-    var angle_degrees := rad_to_deg(atan2(vector.y, vector.x))
-    var candidate := _direction_for_angle(angle_degrees)
+    var angle_degrees: float = rad_to_deg(atan2(vector.y, vector.x))
+    var candidate: String = _direction_for_angle(angle_degrees)
     if candidate == previous:
         return candidate
 
