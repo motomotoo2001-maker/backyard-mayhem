@@ -37,3 +37,14 @@ func run() -> void:
     TestUtils.assert_eq(int(boss.get("hud_priority", 0)), 100, "boss warning should have top priority")
     TestUtils.assert_true(float(boss.get("telegraph_radius", 0.0)) >= 180.0, "radial slam should have large danger radius")
     TestUtils.assert_true(int(boss.get("pulse_count", 0)) >= 3, "radial slam should pulse at least three times")
+
+    var standard_hit: Dictionary = script.enemy_hit_snapshot(&"standard", false)
+    TestUtils.assert_eq(StringName(standard_hit.get("animation", &"")), &"hurt", "non-lethal hit should request hurt animation")
+    TestUtils.assert_true(not bool(standard_hit.get("play_death_burst", true)), "non-lethal hit should not play death burst")
+    TestUtils.assert_true(float(standard_hit.get("knockback_speed", 0.0)) >= 140.0, "standard enemy should get readable knockback")
+
+    var boss_death: Dictionary = script.enemy_hit_snapshot(&"boss", true)
+    TestUtils.assert_eq(StringName(boss_death.get("animation", &"")), &"death", "lethal hit should request death animation")
+    TestUtils.assert_true(bool(boss_death.get("play_death_burst", false)), "lethal hit should play death burst")
+    TestUtils.assert_true(float(boss_death.get("death_burst_scale", 0.0)) > 1.5, "boss death burst should be visually large")
+    TestUtils.assert_true(float(boss_death.get("hit_stop_seconds", 0.0)) >= 0.05, "boss hit should have stronger hit-stop")
