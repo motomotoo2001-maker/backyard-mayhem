@@ -1,7 +1,9 @@
 .godot/
+backups/
 .tools/
 .superpowers/
 .worktrees/
+*.gd.uid
 *.tmp
 *.log
 .DS_Store
