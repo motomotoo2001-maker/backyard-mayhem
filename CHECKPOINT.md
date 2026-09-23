@@ -4,70 +4,81 @@
 - `main` = latest tested stable version.
 - `dev/backyard-vertical-slice` = active development / QA branch.
 - After every completed stage: tests -> commit -> push -> update this file.
+- Development plan: `docs/superpowers/plans/2026-09-23-backyard-mayhem-next-development.md`.
 
 ## Canonical full snapshot
-- Engine: Godot 4.7.2
-- Project: Backyard Mayhem / Reference A
-- Status: playable vertical slice
-- Library snapshot: `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip`
-- SHA-256: `b1247f7b1df490f6051a7f8f006bc2454862695e1707de4d7ada823abd936f22`
-- Source archive: `BackyardMayhem_Project_Backup.rar`
-- Snapshot excludes generated `.godot` cache, local backups and `*.gd.uid` sidecars.
+- Engine baseline: Godot 4.7.2 stable.
+- Compatibility candidate: Godot 4.8-dev6, validation only until the 4.7.2 build is fully green.
+- Project: Backyard Mayhem / Reference A.
+- Status: playable vertical slice.
+- Canonical snapshot: `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip`.
+- Previous verified SHA-256: `b1247f7b1df490f6051a7f8f006bc2454862695e1707de4d7ada823abd936f22`.
 
 ## Important repository scope
-- The Library ZIP above is the authoritative **full gameplay project** with the latest scenes/scripts/assets/tests.
-- The current GitHub `dev/backyard-vertical-slice` tree is still a **QA/bootstrap slice** used to harden animation/art contracts and CI.
-- Its `scenes/levels/backyard.tscn` is an older bootstrap scene, so a green GitHub Actions run currently proves the QA helpers/parser are clean, **not yet the entire full gameplay snapshot**.
-- Next major repository task, once ZIP extraction is available in the execution runtime, is to synchronize the real text project tree (`scripts/`, `scenes/`, `tests/`, `tools/`, `data/`, `project.godot`) from `BackyardMayhem_LATEST.zip` into this branch and then run full-game CI.
+- The Library ZIP is the authoritative **full gameplay project** with scenes/scripts/assets/tests.
+- GitHub `dev/backyard-vertical-slice` is currently a hardened **QA/bootstrap slice**.
+- Its green CI proves the QA/parser contracts below, not yet the entire full gameplay snapshot.
+- Highest-priority infrastructure task: synchronize the real text tree (`scripts/`, `scenes/`, `tests/`, `tools/`, `data/`, `project.godot`) from the latest ZIP as soon as archive extraction runtime is healthy, then run full-game CI.
 
 ## Implemented in full snapshot
-- Reference A backyard + HUD
-- New 8-direction hero
-- Dash + brief invulnerability + HUD feedback
-- Chair / Garden Hose / Rotary Sprinkler
-- Defense damage states + destruction VFX
-- Electric Fence / Golden Slipper / Super Soaker upgrades
-- Ranged Neighbor Kid
-- Burst AI for Cat / Bulldog / Skateboard Teen
-- Flying Pigeon + splat bombing attack
-- Boss warning + camera impact shake
-- Water/projectile/dust/XP/coin VFX
-- Five-wave / builder / visual / performance test suite
+- Reference A backyard + HUD.
+- New 8-direction hero.
+- Dash + brief invulnerability + HUD feedback.
+- Chair / Garden Hose / Rotary Sprinkler.
+- Defense damage states + destruction VFX.
+- Electric Fence / Golden Slipper / Super Soaker upgrades.
+- Ranged Neighbor Kid.
+- Burst AI for Cat / Bulldog / Skateboard Teen.
+- Flying Pigeon + splat bombing attack.
+- Boss warning + camera impact shake.
+- Water/projectile/dust/XP/coin VFX.
+- Five-wave / builder / visual / performance test suite.
 
 ## Hero animation QA — verified on Godot 4.7.2
 - Canonical profile defines 8 directions and **280 required frames**:
-  - idle 4 × 8
-  - run 8 × 8
-  - fire 4 × 8
-  - build 6 × 8
-  - hurt 3 × 8
-  - dash 4 × 8
-  - death 6 × 8
-- Runtime standard: 320×320 PNG, top margin >= 18 px, bottom >= 12 px, sides >= 8 px, stable ground anchor.
-- `hero_frame_validator.gd` rejects clipped frames and large detached alpha islands such as label fragments, neighboring-frame debris or accidentally baked VFX, while tolerating tiny export/AA specks.
-- `hero_frame_manifest.gd` enforces the exact 280 canonical filenames and rejects missing, unexpected and duplicate frames.
-- `hero_asset_policy.gd` forbids source/user_pack/reference sheets from being referenced as runtime hero frames; only normalized canonical PNGs under `assets/runtime/characters/builder_hero/` are accepted.
-- `hero_direction_resolver.gd` adds 8-direction facing with movement/aim deadzone and angular hysteresis to prevent FRONT↔FRONT-RIGHT sprite flicker near sector boundaries.
-- GitHub Actions treats `SCRIPT ERROR`, `Parse Error`, and failed script loads as hard failures even when Godot returns process exit code 0.
+  - idle 4 × 8 @ 5 FPS loop
+  - run 8 × 8 @ 12 FPS loop
+  - fire 4 × 8 @ 14 FPS one-shot
+  - build 6 × 8 @ 11 FPS one-shot
+  - hurt 3 × 8 @ 12 FPS one-shot
+  - dash 4 × 8 @ 18 FPS one-shot
+  - death 6 × 8 @ 8 FPS one-shot
+- Runtime standard: 320×320 PNG, stable bottom-center ground anchor, safe margins, no labels/white fringe/neighbour debris.
+- `hero_frame_validator.gd` rejects clipped frames and detached alpha islands.
+- `hero_frame_manifest.gd` enforces the exact 280 canonical filenames.
+- `hero_asset_policy.gd` forbids source/user_pack/reference sheets as runtime hero frames.
+- `hero_direction_resolver.gd` adds 8-direction deadzone + angular hysteresis.
+- `hero_animation_state_resolver.gd` enforces action priority/one-shot locking: `death > hurt > dash > build > fire > run/idle`.
+- `hero_spriteframes_validator.gd` checks all 56 SpriteFrames animations for counts, FPS, loop flags and missing textures.
 
-## Fresh QA evidence
-- Run `35872806284`: parser PASS, 3 test files / 0 failures.
-- Run `35873347067`: parser PASS, 4 test files / 0 failures.
-- Run `35874071147`: parser PASS, 5 test files / 0 failures.
-- Run `35874752071` on commit `13e9d2ffbd0b8515939c3bc2ea51e98ccb7a0c34`: parser PASS, **6 test files / 0 failures**, no hidden script/parse errors.
+## Combat/VFX QA
+- `combat_vfx_timing_profile.gd` synchronizes combat feedback to animation frames instead of loose timers:
+  - fire muzzle/recoil/air-blast on frame 1; recovery on frame 3.
+  - dash trail start/peak/end on frames 0/1/3.
+  - hurt impact/recovery on frames 0/2.
+- Test timing is derived from the canonical hero FPS profile, including Dash = 18 FPS.
 
-## Current hero art task
-- Root cause of bad slicing: old movement sheets clip head/feet in several directions and some source sheets contain labels, white backgrounds, grids or decorative debris.
-- The clean 8-direction rotation sheet is the visual identity/silhouette reference, not a runtime atlas.
-- Production standard: transparent normalized frames, common ground anchor, no labels, no white fringe, no neighboring-frame debris.
-- Continue cleaning/replacing idle/run/fire/build/hurt/dash/death in 8 directions.
+## CI hardening
+- GitHub Actions runs Godot 4.7.2 editor parse gate + headless tests.
+- `SCRIPT ERROR`, `Parse Error` and failed script loads are hard failures.
+- `tests/run_all.gd` now rejects non-instantiable scripts with `Script.can_instantiate()` instead of hanging until timeout.
+- Fresh verified run `35888694500` on commit `6b967ed061fbdbbf344d47627df9ba004d377692`: parser PASS, **9 test files / 0 failures**, no hidden parse/script errors.
 
-## Next
-1. Add one-shot hero animation state priority/locking so idle/run cannot interrupt fire/build/hurt/dash/death mid-action.
-2. Synchronize the full gameplay text tree from the Library ZIP into GitHub as soon as archive extraction is available again, then expand CI to the real game.
-3. Finish hero animation replacement and run the frame validator over all real runtime frames.
-4. Combat animation/VFX polish: recoil, muzzle/air blast, hit reactions, impacts, dash readability.
-5. Enemy animation readability / death feedback, then wave and upgrade balance polish.
+## Visual audit findings
+- Several uploaded enemy/water sheets are good style references but are **concept sheets, not production atlases**.
+- Common defects to exclude from runtime assets: white backgrounds, labels, UI counters, mixed camera angles, baked speech bubbles/dust/VFX/shadows and inconsistent per-frame scale.
+- Water VFX should be normalized into separate transparent assets: stream, projectile, splash/impact, foam/droplets, vortex/super attack.
+- Enemy priority for normalized runtime animation: Raccoon -> Cat -> Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss.
+
+## Current priorities
+1. Synchronize full gameplay text tree from `BackyardMayhem_LATEST.zip` into GitHub when the archive execution runtime is available.
+2. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
+3. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
+4. Normalize Water VFX into transparent strips with fixed origins/anchors.
+5. Normalize enemy runtime sprites and add readable hit/death feedback.
+6. Polish tower/building upgrade visuals, backyard composition and HUD readability.
+7. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
+8. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, checkpoint/tag after the full-game gate is green.
 
 ## New-chat recovery rule
-Read `CHECKPOINT.md` and `LATEST_SNAPSHOT.md` first. If local files are unavailable or ambiguous, restore `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip` and verify its SHA-256 before continuing. Never guess which archive is current.
+Read `CHECKPOINT.md`, `LATEST_SNAPSHOT.md`, and the development plan first. Restore the canonical ZIP if the local project is unavailable. Never guess which archive is current.
