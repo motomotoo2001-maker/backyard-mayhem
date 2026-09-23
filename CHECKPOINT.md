@@ -12,13 +12,15 @@
 - Project: Backyard Mayhem / Reference A.
 - Status: playable vertical slice.
 - Canonical snapshot: `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip`.
-- Previous verified SHA-256: `b1247f7b1df490f6051a7f8f006bc2454862695e1707de4d7ada823abd936f22`.
+- Library file id: `libfile_f66e181bea6c819181c8698135e95d4b`.
+- Fresh clean upload verified on 2026-09-23: ZIP integrity PASS, `project.godot` at archive root, 1,842 files, 128 GDScript files, 36 scenes, 796 PNG assets, and 69 test scripts.
+- Previous verified SHA-256: `b1247f7b1df490f6051a7f8f006bc2454862695e1707de4d7ada823abd936f22` (older canonical snapshot; recompute after next full-game packaging pass).
 
 ## Important repository scope
 - The Library ZIP is the authoritative **full gameplay project** with scenes/scripts/assets/tests.
 - GitHub `dev/backyard-vertical-slice` is currently a hardened **QA/bootstrap slice**.
 - Its green CI proves the QA/parser contracts below, not yet the entire full gameplay snapshot.
-- Highest-priority infrastructure task: synchronize the real text tree (`scripts/`, `scenes/`, `tests/`, `tools/`, `data/`, `project.godot`) from the latest ZIP as soon as archive extraction runtime is healthy, then run full-game CI.
+- Highest-priority infrastructure task: synchronize the real text tree (`scripts/`, `scenes/`, `tests/`, `tools/`, `data/`, `project.godot`) from the verified clean ZIP, then run full-game CI.
 
 ## Implemented in full snapshot
 - Reference A backyard + HUD.
@@ -84,7 +86,7 @@
 - Enemy priority for normalized runtime animation: Raccoon -> Cat -> Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss.
 
 ## Current priorities
-1. Synchronize full gameplay text tree from `BackyardMayhem_LATEST.zip` into GitHub when the archive execution runtime is available.
+1. Synchronize the real gameplay text tree from the newly verified clean `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
 2. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
 3. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
 4. Normalize Water VFX into transparent strips with fixed origins/anchors.
