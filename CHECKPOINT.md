@@ -5,13 +5,16 @@
 - `dev/backyard-vertical-slice` = active development branch.
 - After every completed stage: tests -> commit -> push -> update this file.
 
-## Last confirmed playable checkpoint
+## Canonical full snapshot
 - Engine: Godot 4.7.2
 - Project: Backyard Mayhem / Reference A
 - Status: playable vertical slice
-- Last full backup: `BackyardMayhem_ReferenceA_2026-09-22_2322.zip`
+- Library snapshot: `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip`
+- SHA-256: `b1247f7b1df490f6051a7f8f006bc2454862695e1707de4d7ada823abd936f22`
+- Source archive: `BackyardMayhem_Project_Backup.rar`
+- Snapshot excludes generated `.godot` cache, local backups and `*.gd.uid` sidecars.
 
-## Implemented before full GitHub resync
+## Implemented
 - Reference A backyard + HUD
 - New 8-direction hero
 - Dash + brief invulnerability + HUD feedback
@@ -23,17 +26,18 @@
 - Flying Pigeon + splat bombing attack
 - Boss warning + camera impact shake
 - Water/projectile/dust/XP/coin VFX
-- Five-wave acceptance + performance tests
+- Five-wave / builder / visual / performance test suite
 
 ## Current hero art task
-- Root cause of bad slicing identified: old movement source clips the top of the head in several directions.
-- Standard: 320x320 transparent frames, common ground anchor, safe margins, no labels/white fringe.
-- Next: finish clean idle/run/fire/build/hurt/dash/death set and re-run hero contracts.
+- Root cause of bad slicing identified: old movement sheet clips head/feet in several directions and can include extra artifacts.
+- Production standard: 320x320 transparent frames, common ground anchor, safe margins, no labels, no white fringe, no neighboring-frame debris.
+- Continue cleaning/replacing idle/run/fire/build/hurt/dash/death in 8 directions.
 
 ## Next
-1. Resync latest full project into this branch.
-2. Finish hero animation replacement.
-3. Combat/VFX polish.
-4. Enemy animation readability and wave balance.
+1. Finish hero animation replacement and re-run hero contracts.
+2. Combat animation and VFX polish.
+3. Enemy animation readability / hit reactions / death feedback.
+4. Wave and upgrade balance polish.
 
-If a new chat starts, read this file and the latest commits on this branch first. Do not guess which archive is current.
+## New-chat recovery rule
+Read `CHECKPOINT.md` and `LATEST_SNAPSHOT.md` first. If local files are unavailable or ambiguous, restore `/BackyardMayhem/LATEST/BackyardMayhem_LATEST.zip` and verify its SHA-256 before continuing. Never guess which archive is current.
