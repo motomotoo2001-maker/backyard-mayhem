@@ -86,8 +86,11 @@
   - Heavy Swing: shorter windup, compact radius, 2 anticipation pulses.
   - Radial Slam: longer windup, much larger danger radius, 3 pulses and heavier impact shake.
 - `water_vfx_asset_policy.gd` only allows canonical transparent runtime paths under `assets/runtime/vfx/water/<kind>/<kind>_NN.png` for stream/splash/impact/projectile/foam/vortex families; raw concept sheets and turret-baked effects are rejected.
+- `visual_feedback_orchestrator.gd` now exposes scene-ready snapshots for frame-synced hero combat cues, defense/base damage and upgrade visuals, boss telegraph/HUD data, and standard/heavy/boss enemy hit/death feedback.
+- Lethal enemy feedback requests the death animation plus the class-specific death burst; non-lethal feedback requests hurt while preserving class-specific flash, hit-stop, knockback and camera shake values.
 - Verified run `35889565334` on commit `6fd13a91d9bc2d28dcdbf2b73f18773c95922fc5`: parser PASS, **11 test files / 0 failures**.
 - Verified run `35896867038` on commit `4ef714ef8707c5b00101c3e47fc307ae5995121e`: parser PASS, **17 test files / 0 failures**.
+- Verified run `35902480910` on commit `101efdbe99a1097f1dec940267a1449dfe9a8f4e`: parser PASS, **22 test files / 0 failures**.
 
 ## HUD readability QA
 - `hud_readability_profile.gd` defines minimum readable card sizes for Dash, Health, Wave Transition, Upgrade Hint, Boss Warning and generic Status.
@@ -129,10 +132,10 @@
 
 ## Current priorities
 1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
-2. Integrate `vertical_slice_session.gd` plus verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
+2. Integrate `vertical_slice_session.gd` and `visual_feedback_orchestrator.gd` plus verified defense/base/boss/HUD/wave/upgrade profiles into the real gameplay scenes after tree sync.
 3. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
-4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact.
-5. Normalize Water VFX into transparent strips with fixed origins/anchors.
+4. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact and enemy hit/death feedback.
+5. Normalize Water VFX into transparent strips with fixed origins/anchors and canonical sequence timing.
 6. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
 7. Polish backyard composition and HUD readability.
 8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
