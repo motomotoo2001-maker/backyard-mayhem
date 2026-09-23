@@ -47,4 +47,6 @@ func run() -> void:
         "death should preserve legacy defeat fallback until production death frames are integrated"
     )
 
+    player.animated_sprite = null
+    sprite.free()
     player.free()
