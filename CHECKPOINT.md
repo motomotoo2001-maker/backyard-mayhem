@@ -65,6 +65,30 @@
 - Verified run `35889870661` on commit `ef10149d378b625bb4eb62322bb501d1559a6e49`: parser PASS, **12 test files / 0 failures**.
 - Verified run `35890282608` on commit `e9c3b6afd5365b4929aa823033a5cb23808b1ab8`: parser PASS, **13 test files / 0 failures**.
 
+### Raccoon production animation QA
+- Runtime canvas: **256×256**, stable ground anchor `(128, 236)`, horizontal flip allowed.
+- Canonical actions total **27 frames**:
+  - idle 4 @ 6 FPS loop
+  - run 8 @ 12 FPS loop
+  - attack 6 @ 12 FPS one-shot; hit event on frame 3
+  - hurt 3 @ 12 FPS one-shot
+  - death 6 @ 9 FPS one-shot
+- `raccoon_frame_manifest.gd` enforces exactly 27 runtime filenames under `assets/runtime/enemies/raccoon/<action>/`.
+- `raccoon_spriteframes_validator.gd` checks all five animations for frame counts, FPS, loop flags and missing textures.
+- Verified run `35905143315` on commit `bfb46623800da8abb6153e8fa7de7fe4f256ea6d`: Godot 4.7.2 parser PASS, **28 test files / 0 failures**.
+
+### Cat production animation QA
+- Runtime canvas: **256×256**, stable ground anchor `(128, 238)`, horizontal flip allowed.
+- Cat intentionally reads faster than Raccoon; canonical actions total **27 frames**:
+  - idle 4 @ 7 FPS loop
+  - run 8 @ 14 FPS loop
+  - attack/pounce 6 @ 14 FPS one-shot; hit event on frame 3
+  - hurt 3 @ 13 FPS one-shot
+  - death 6 @ 10 FPS one-shot
+- `cat_frame_manifest.gd` enforces exactly 27 runtime filenames under `assets/runtime/enemies/cat/<action>/`.
+- `cat_spriteframes_validator.gd` checks all five Cat animations for frame counts, FPS, loop flags and missing textures.
+- Verified run `35907817899` on commit `8930ba8dab73ce9df4aac22d41586c3446eaa015`: Godot 4.7.2 parser PASS, **31 test files / 0 failures**.
+
 ## Defense / base visual QA
 - `defense_visual_state_resolver.gd` standardizes defense/base health visuals: fresh > 66%, damaged <= 66%, critical <= 33%, broken at 0 HP.
 - Visual flags unify cracks, smoke, debris and Electric Fence overlay behavior across Chair/Hose/Sprinkler/base scenes.
@@ -139,8 +163,8 @@
 ## Visual audit findings
 - Several uploaded enemy/water sheets are good style references but are **concept sheets, not production atlases**.
 - Common defects to exclude from runtime assets: white backgrounds, labels, UI counters, mixed camera angles, baked speech bubbles/dust/VFX/shadows and inconsistent per-frame scale.
-- Water VFX runtime contract is now complete; the next visual step is producing/normalizing the actual 37 transparent frames and assembling them into validated SpriteFrames.
-- Enemy priority for normalized runtime animation: Raccoon -> Cat -> Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss.
+- Water VFX runtime contract is complete; the next visual step is producing/normalizing the actual 37 transparent frames and assembling them into validated SpriteFrames.
+- Enemy production-contract status: **Raccoon complete, Cat complete; next Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss**.
 
 ## Current priorities
 1. Synchronize the real gameplay text tree from the verified Google Drive `BackyardMayhem_LATEST.zip` into GitHub, then run full-game CI.
@@ -148,7 +172,7 @@
 3. Produce/normalize the **37 canonical Water VFX frames** and assemble validated SpriteFrames.
 4. Finish/validate all 280 hero runtime frames and hook them into real SpriteFrames.
 5. Integrate combat timing profile into real Player/VFX code: recoil, muzzle/air blast, dash trail, hurt impact and enemy hit/death feedback.
-6. Normalize first enemy production set: Raccoon, validate every frame, then Cat -> Bulldog -> Pigeon -> Kid -> Skater -> Boss.
+6. Continue enemy production contracts: **Bulldog -> Pigeon -> Neighbor Kid -> Skateboard Teen -> Boss**, then produce/normalize their actual runtime frames.
 7. Polish backyard composition and HUD readability.
 8. Re-run five-wave acceptance, builder/water regressions and 100-enemy performance.
 9. Create a new canonical `BackyardMayhem_LATEST.zip`, SHA-256, Drive checkpoint and GitHub tag after the full-game gate is green.
