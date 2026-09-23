@@ -15,6 +15,10 @@ func snapshot() -> Dictionary:
     var wave_number := int(session_state.get("current_wave", 1))
     var wave_data: Dictionary = Waves.wave(wave_number)
     var base_tier := int(session_state.get("base_tier", 0))
+    var base_hp := float(session_state.get("base_hp", 100.0))
+    var base_max_hp := float(session_state.get("base_max_hp", 100.0))
+    var owned: Array = session_state.get("owned_upgrades", []) as Array
+    var electrified := owned.has(&"electric_fence")
 
     session_state["threat_budget"] = int(wave_data.get("threat_budget", 0))
     session_state["reward_coins"] = int(wave_data.get("reward_coins", 0))
@@ -22,7 +26,7 @@ func snapshot() -> Dictionary:
     session_state["enemy_pool"] = (wave_data.get("enemy_pool", []) as Array).duplicate()
     session_state["is_boss_wave"] = bool(wave_data.get("is_boss_wave", false))
     session_state["focus"] = StringName(wave_data.get("focus", &""))
-    session_state["base_visual"] = Visuals.defense_visual_snapshot(100.0, 100.0, false, base_tier, true)
+    session_state["base_visual"] = Visuals.defense_visual_snapshot(base_hp, base_max_hp, electrified, base_tier, true)
     return session_state
 
 func complete_wave() -> Dictionary:
@@ -34,6 +38,12 @@ func start_next_wave() -> bool:
 
 func purchase_upgrade(category: StringName, upgrade_id: StringName) -> bool:
     return _session.purchase_upgrade(category, upgrade_id)
+
+func damage_base(amount: float) -> bool:
+    return _session.damage_base(amount)
+
+func repair_base(amount: float) -> bool:
+    return _session.repair_base(amount)
 
 func hero_frame_events(action: StringName, frame: int) -> Array[StringName]:
     return Visuals.hero_frame_events(action, frame)
