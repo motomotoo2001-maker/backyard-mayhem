@@ -14,6 +14,9 @@ const ACTION_ANIMATION_PRIORITIES := {
     &"death": 50,
     &"defeat": 50,
 }
+const WEAPON_RECOIL_PX := 6.0
+const DASH_TRAIL_PEAK_SCALE := 1.2
+const HURT_FLASH_COLOR := Color(1.28, 0.68, 0.68, 1.0)
 
 signal incapacitated
 signal revived
@@ -44,6 +47,8 @@ var _facing_direction: String = "front_right"
 var _last_health := 0.0
 var _last_vfx_dispatch_animation: StringName = &""
 var _last_vfx_dispatch_frame := -1
+var _weapon_rest_position := Vector2.ZERO
+var _dash_fx_rest_scale := Vector2.ONE
 
 func _ready() -> void:
     aim_area.body_entered.connect(_on_aim_body_entered)
@@ -53,6 +58,8 @@ func _ready() -> void:
     health_component.health_changed.connect(_on_health_changed)
     _last_health = health_component.current_health
     weapon_controller.configure_aim_controller(aim_controller)
+    _weapon_rest_position = weapon_controller.position
+    _dash_fx_rest_scale = dash_fx.scale
     weapon_controller.shot_fired.connect(_on_weapon_shot_fired)
     animated_sprite.animation_finished.connect(_on_animation_finished)
     animated_sprite.animation_changed.connect(_on_animation_changed)
@@ -106,6 +113,7 @@ func _on_dash_started(direction: Vector2) -> void:
     if dash_fx != null:
         dash_fx.visible = true
         dash_fx.rotation = direction.angle()
+        dash_fx.scale = _dash_fx_rest_scale
     if animated_sprite != null:
         animated_sprite.modulate = Color(1.08, 1.08, 1.15, 1.0)
 
@@ -114,6 +122,7 @@ func _on_dash_finished() -> void:
         hurtbox.set_invulnerable(false)
     if dash_fx != null:
         dash_fx.visible = false
+        dash_fx.scale = _dash_fx_rest_scale
     if animated_sprite != null:
         animated_sprite.modulate = Color.WHITE
 
@@ -152,6 +161,21 @@ func _frame_vfx_events(animation_name: StringName, frame: int) -> Array[StringNa
     var action := _animation_base_state(animation_name)
     return VisualFeedbackOrchestrator.hero_frame_events(action, frame)
 
+func _builtin_feedback_for_event(event_name: StringName, action: StringName) -> Dictionary:
+    if event_name == &"recoil_peak" and action == &"fire":
+        return {"weapon_recoil_px": WEAPON_RECOIL_PX}
+    if event_name == &"recovery" and action == &"fire":
+        return {"reset_weapon": true}
+    if event_name == &"trail_peak" and action == &"dash":
+        return {"dash_trail_scale": DASH_TRAIL_PEAK_SCALE}
+    if event_name == &"trail_end" and action == &"dash":
+        return {"reset_dash_trail": true}
+    if event_name == &"impact" and action == &"hurt":
+        return {"hurt_flash": true}
+    if event_name == &"recovery" and action == &"hurt":
+        return {"clear_hurt_flash": true}
+    return {}
+
 func _on_animation_changed() -> void:
     _dispatch_current_frame_vfx_events()
 
@@ -170,7 +194,37 @@ func _dispatch_current_frame_vfx_events() -> void:
     _last_vfx_dispatch_frame = frame
     var action := _animation_base_state(animation_name)
     for event_name in _frame_vfx_events(animation_name, frame):
+        _apply_builtin_feedback(event_name, action)
         animation_vfx_event.emit(event_name, action, frame)
+
+func _apply_builtin_feedback(event_name: StringName, action: StringName) -> void:
+    var response := _builtin_feedback_for_event(event_name, action)
+    if response.is_empty():
+        return
+
+    if response.has("weapon_recoil_px") and weapon_controller != null:
+        var recoil_direction := _facing_vector
+        if aim_controller != null and is_instance_valid(aim_controller) and aim_controller.has_method("get_aim_direction"):
+            var aim_direction: Vector2 = aim_controller.get_aim_direction()
+            if aim_direction.length_squared() > 0.001:
+                recoil_direction = aim_direction.normalized()
+        weapon_controller.position = _weapon_rest_position - recoil_direction * float(response["weapon_recoil_px"])
+
+    if bool(response.get("reset_weapon", false)) and weapon_controller != null:
+        weapon_controller.position = _weapon_rest_position
+
+    if response.has("dash_trail_scale") and dash_fx != null:
+        var trail_scale := float(response["dash_trail_scale"])
+        dash_fx.scale = _dash_fx_rest_scale * trail_scale
+
+    if bool(response.get("reset_dash_trail", false)) and dash_fx != null:
+        dash_fx.scale = _dash_fx_rest_scale
+
+    if bool(response.get("hurt_flash", false)) and animated_sprite != null:
+        animated_sprite.modulate = HURT_FLASH_COLOR
+
+    if bool(response.get("clear_hurt_flash", false)) and animated_sprite != null:
+        animated_sprite.modulate = Color.WHITE
 
 func _select_animation_state(input_direction: Vector2) -> StringName:
     if dash_component != null and is_instance_valid(dash_component) and dash_component.has_method("is_active"):
@@ -263,6 +317,10 @@ func _finish_revive() -> void:
     _last_health = health_component.current_health
     _incapacitated = false
     _action_animation = &""
+    if animated_sprite != null:
+        animated_sprite.modulate = Color.WHITE
+    if weapon_controller != null:
+        weapon_controller.position = _weapon_rest_position
     set_controls_enabled(true)
     _update_animation(Vector2.ZERO)
     revived.emit()
