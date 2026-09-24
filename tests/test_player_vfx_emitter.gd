@@ -20,5 +20,15 @@ func run() -> void:
         TestUtils.assert_near(blast.rotation, PI * 0.5, 0.001, "down-facing air blast should rotate with aim direction")
         blast.free()
 
+    var emitter := PlayerVFXEmitter.new()
+    var spawned: Node2D = emitter.spawn_effect(&"muzzle_flash", Vector2(24, -6), Vector2.RIGHT, 1.25, 0.08)
+    TestUtils.assert_true(spawned != null, "scene-facing emitter must spawn a muzzle node")
+    if spawned != null:
+        TestUtils.assert_eq(spawned.position, Vector2(24, -6), "spawned VFX must honor local origin")
+        TestUtils.assert_near(spawned.scale.x, 1.25, 0.001, "spawned VFX must honor effect scale")
+        TestUtils.assert_near(float(spawned.get_meta("effect_lifetime", 0.0)), 0.08, 0.001, "spawned VFX must retain cleanup lifetime")
+        TestUtils.assert_true(spawned.get_parent() == emitter, "spawned VFX must be parented to emitter")
+    emitter.free()
+
     var missing: Node2D = PlayerVFXEmitter.build_effect_node(&"unknown", Vector2.RIGHT, 1.0)
     TestUtils.assert_true(missing == null, "unknown VFX names must fail closed")
