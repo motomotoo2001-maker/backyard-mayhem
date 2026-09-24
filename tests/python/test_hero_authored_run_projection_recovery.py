@@ -83,11 +83,23 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
                 self.assertEqual(306, bbox[3])
                 self.assertGreaterEqual(bbox[0], 6)
                 self.assertLessEqual(bbox[2], 314)
-                red_hits = 0
-                for r, g, b, a in frame.getdata():
-                    if a > 16 and r > 220 and g < 50 and b < 50:
-                        red_hits += 1
-                self.assertEqual(0, red_hits, f"label contamination in {path.name}")
+                red_positions = []
+                for y in range(frame.height):
+                    for x in range(frame.width):
+                        r, g, b, a = frame.getpixel((x, y))
+                        if a > 16 and r > 220 and g < 50 and b < 50:
+                            red_positions.append((x, y))
+                if red_positions:
+                    xs = [x for x, _y in red_positions]
+                    ys = [y for _x, y in red_positions]
+                    red_bbox = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
+                else:
+                    red_bbox = None
+                self.assertEqual(
+                    0,
+                    len(red_positions),
+                    f"label contamination in {path.name}: red_bbox={red_bbox}, alpha_bbox={bbox}",
+                )
 
 
 if __name__ == "__main__":
