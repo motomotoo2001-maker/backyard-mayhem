@@ -22,10 +22,58 @@ def _load_base():
     return module
 
 
+def _alpha_bbox(image: Image.Image):
+    return image.getchannel("A").point(lambda value: 255 if value > 16 else 0).getbbox()
+
+
+def _longest_run(alpha, y: int, left: int, right: int) -> int:
+    best = 0
+    current = 0
+    for x in range(left, right):
+        if alpha[x, y] > 16:
+            current += 1
+            best = max(best, current)
+        else:
+            current = 0
+    return best
+
+
+def _strip_wide_bottom_slab(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    bbox = _alpha_bbox(rgba)
+    if bbox is None:
+        return rgba
+    left, top, right, bottom = bbox
+    width = right - left
+    height = bottom - top
+    if width < 12 or height < 20:
+        return rgba
+
+    alpha = rgba.getchannel("A").load()
+    wide_threshold = max(8, int(width * 0.55))
+    slab_rows = []
+    y = bottom - 1
+    while y >= top and _longest_run(alpha, y, left, right) >= wide_threshold:
+        slab_rows.append(y)
+        y -= 1
+    if len(slab_rows) < 2:
+        return rgba
+    slab_start = min(slab_rows)
+    slab_height = bottom - slab_start
+    if slab_height > max(10, int(height * 0.22)):
+        return rgba
+
+    cleaned = rgba.copy()
+    pixels = cleaned.load()
+    for yy in range(slab_start, bottom):
+        for xx in range(left, right):
+            pixels[xx, yy] = (0, 0, 0, 0)
+    return cleaned
+
+
 def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
-    alpha = rgba.getchannel("A")
-    bbox = alpha.point(lambda value: 255 if value > 16 else 0).getbbox()
+    bbox = _alpha_bbox(rgba)
     if bbox is None:
         return rgba
     left, top, right, bottom = bbox
@@ -33,16 +81,12 @@ def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
     if height < 20:
         return rgba
 
-    pixels = alpha.load()
-    row_counts = []
-    for y in range(top, bottom):
-        row_counts.append(sum(1 for x in range(left, right) if pixels[x, y] > 16))
+    alpha = rgba.getchannel("A").load()
+    row_counts = [sum(1 for x in range(left, right) if alpha[x, y] > 16) for y in range(top, bottom)]
     maximum = max(row_counts) if row_counts else 0
     if maximum <= 0:
         return rgba
 
-    # Cross-row bridges remain narrow after scaling, while two legs together stay much
-    # wider. Search only the lower half so hair/neck/weapon details cannot trigger a cut.
     narrow_threshold = max(4, int(maximum * 0.28))
     search_start = max(1, int(height * 0.48))
     candidate_cut = None
@@ -69,23 +113,25 @@ def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
 
     cut_y = top + candidate_cut
     cleaned = rgba.copy()
-    cleaned_pixels = cleaned.load()
+    pixels = cleaned.load()
     for y in range(cut_y, bottom):
         for x in range(left, right):
-            cleaned_pixels[x, y] = (0, 0, 0, 0)
+            pixels[x, y] = (0, 0, 0, 0)
     return cleaned
 
 
 def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
     with Image.open(path) as source:
-        image = _strip_connected_lower_chrome(source.convert("RGBA"))
-    bbox = image.getchannel("A").point(lambda value: 255 if value > 16 else 0).getbbox()
+        image = source.convert("RGBA")
+    image = _strip_wide_bottom_slab(image)
+    image = _strip_connected_lower_chrome(image)
+    bbox = _alpha_bbox(image)
     if bbox is None:
         raise ValueError(f"Recovered frame is empty: {path.name}")
     shift_y = ground_y - bbox[3]
     shifted = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
     shifted.alpha_composite(image, (0, shift_y))
-    normalized_bbox = shifted.getchannel("A").point(lambda value: 255 if value > 16 else 0).getbbox()
+    normalized_bbox = _alpha_bbox(shifted)
     if normalized_bbox is None or normalized_bbox[3] != ground_y:
         raise ValueError(f"Could not normalize {path.name} to ground {ground_y}; bbox={normalized_bbox}")
     if normalized_bbox[1] < 6:
