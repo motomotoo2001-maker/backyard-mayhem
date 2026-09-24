@@ -45,6 +45,17 @@ func run() -> void:
     TestUtils.assert_true(not texture_result.get("ok", true), "null runtime frame texture must fail")
     TestUtils.assert_true(texture_result.get("missing_textures", PackedStringArray()).has("idle_right:01"), "texture result identifies frame")
 
+    # Visual regression: eight correctly named RUN frames are not sufficient if
+    # they all contain the same normalized pose. Whole-body bob/translation must
+    # not be accepted as authored animation.
+    var static_run := _build_valid_frames()
+    var static_texture := _run_texture(0)
+    for frame_index in range(Profile.frame_count(&"run")):
+        static_run.set_frame(&"run_front", frame_index, static_texture)
+    var static_result: Dictionary = Validator.validate(static_run)
+    TestUtils.assert_true(not static_result.get("ok", true), "static directional RUN sequence must fail SpriteFrames validation")
+    TestUtils.assert_true(static_result.get("bad_motion_diversity", PackedStringArray()).has("run_front"), "motion diversity result identifies static directional RUN")
+
 func _build_valid_frames() -> SpriteFrames:
     var frames := SpriteFrames.new()
     if frames.has_animation(&"default"):
@@ -64,5 +75,31 @@ func _build_valid_frames() -> SpriteFrames:
             frames.set_animation_speed(animation, Profile.fps(action))
             frames.set_animation_loop(animation, Profile.loops(action))
             for frame_index in range(Profile.frame_count(action)):
-                frames.add_frame(animation, texture)
+                var frame_texture: Texture2D = _run_texture(frame_index) if action == &"run" else texture
+                frames.add_frame(animation, frame_texture)
     return frames
+
+func _run_texture(frame_index: int) -> Texture2D:
+    var image := Image.create(48, 48, false, Image.FORMAT_RGBA8)
+    image.fill(Color(0, 0, 0, 0))
+    var white := Color.WHITE
+    image.fill_rect(Rect2i(18, 8, 12, 24), white)
+    image.fill_rect(Rect2i(20, 3, 8, 8), white)
+    match frame_index % 4:
+        0:
+            image.fill_rect(Rect2i(10, 15, 10, 5), white)
+            image.fill_rect(Rect2i(16, 30, 6, 14), white)
+            image.fill_rect(Rect2i(28, 30, 6, 10), white)
+        1:
+            image.fill_rect(Rect2i(28, 15, 10, 5), white)
+            image.fill_rect(Rect2i(16, 30, 6, 10), white)
+            image.fill_rect(Rect2i(28, 30, 6, 14), white)
+        2:
+            image.fill_rect(Rect2i(8, 20, 12, 5), white)
+            image.fill_rect(Rect2i(16, 30, 6, 12), white)
+            image.fill_rect(Rect2i(28, 30, 6, 8), white)
+        _:
+            image.fill_rect(Rect2i(28, 20, 12, 5), white)
+            image.fill_rect(Rect2i(16, 30, 6, 8), white)
+            image.fill_rect(Rect2i(28, 30, 6, 12), white)
+    return ImageTexture.create_from_image(image)
