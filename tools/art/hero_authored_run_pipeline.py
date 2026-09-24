@@ -138,7 +138,6 @@ def _is_character_candidate(
     if component.pixels < min_pixels:
         return False
 
-    # Direction cards are intentionally much wider than a character silhouette.
     aspect = component.width / max(1.0, float(component.height))
     if aspect < 0.18 or aspect > 1.8:
         return False
@@ -204,9 +203,6 @@ def _select_character_slots(
     if len(row_components) == expected_slots:
         slots = sorted(row_components, key=lambda component: component.center_x)
     else:
-        # Extra components are normally detached props/UI fragments. Cluster by X,
-        # then select the component that best matches the row's normal vertical
-        # center/height instead of blindly taking the largest filled shapes.
         ordered = sorted(row_components, key=lambda component: component.center_x)
         count = len(ordered)
         centers = [
@@ -320,8 +316,6 @@ def _first_core_foreground_y(
     bbox: tuple[int, int, int, int],
     center_x: float,
 ) -> int | None:
-    """Find the first body row near the slot center, ignoring off-axis spikes."""
-
     left, top, right, bottom = bbox
     half_width = max(2, int((right - left) * 0.20))
     core_left = max(left, int(round(center_x)) - half_width)
@@ -345,8 +339,6 @@ def _tighten_outlier_top(
     median_top: float,
     median_height: float,
 ) -> tuple[int, int, int, int]:
-    """Trim only an anomalously tall attached fragment above a normal body row."""
-
     left, top, right, bottom = bbox
     tolerance = max(6, int(round(median_height * 0.14)))
     if top >= median_top - tolerance:
@@ -432,11 +424,7 @@ def _nearest_segment(segments: Sequence[tuple[int, int]], center_x: float) -> tu
 
 
 def _remove_leading_spikes(crop: Image.Image) -> Image.Image:
-    """Remove a short off-axis fragment attached above the main body by a tiny bridge.
-
-    This is deliberately limited to the first few foreground rows. Long authored
-    weapon/robe/leg geometry lower in the frame is never filtered.
-    """
+    """Remove a short off-axis fragment attached above the main body by a tiny bridge."""
 
     alpha_bbox = crop.getchannel("A").getbbox()
     if alpha_bbox is None:
@@ -457,15 +445,18 @@ def _remove_leading_spikes(crop: Image.Image) -> Image.Image:
 
     stable_left = int(round(median([segment[0] for segment in sample_segments])))
     stable_right = int(round(median([segment[1] for segment in sample_segments])))
-    margin = max(2, int((right - left) * 0.05))
-    keep_left = max(0, stable_left - margin)
-    keep_right = min(crop.width, stable_right + margin)
+    # The leading rows are the only place where an attached label/spike can
+    # survive the row-band trim. Use a one-pixel inset into the stable body
+    # silhouette here; do not expand it with a margin, because Lanczos would
+    # magnify even a 2-3 px leftover spur into a visible runtime artifact.
+    keep_left = min(crop.width, max(0, stable_left + 1))
+    keep_right = max(keep_left + 1, min(crop.width, stable_right - 1))
 
     pixels = crop.load()
     for y in range(top, min(bottom, sample_start + 1)):
         for x in range(crop.width):
             if x < keep_left or x >= keep_right:
-                r, g, b, a = pixels[x, y]
+                _r, _g, _b, a = pixels[x, y]
                 if a > 8:
                     pixels[x, y] = (0, 0, 0, 0)
     return crop
