@@ -89,6 +89,7 @@ static func _build_muzzle_flash(root: Node2D) -> void:
     spark_top.default_color = MUZZLE_SPARK_COLOR
     spark_top.begin_cap_mode = Line2D.LINE_CAP_ROUND
     spark_top.end_cap_mode = Line2D.LINE_CAP_ROUND
+    spark_top.antialiased = true
     root.add_child(spark_top)
 
     var spark_bottom := Line2D.new()
@@ -102,6 +103,7 @@ static func _build_muzzle_flash(root: Node2D) -> void:
     spark_bottom.default_color = MUZZLE_SPARK_COLOR
     spark_bottom.begin_cap_mode = Line2D.LINE_CAP_ROUND
     spark_bottom.end_cap_mode = Line2D.LINE_CAP_ROUND
+    spark_bottom.antialiased = true
     root.add_child(spark_bottom)
 
 static func _build_air_blast(root: Node2D) -> void:
@@ -118,6 +120,7 @@ static func _build_air_blast(root: Node2D) -> void:
     inner.default_color = AIR_INNER_COLOR
     inner.begin_cap_mode = Line2D.LINE_CAP_ROUND
     inner.end_cap_mode = Line2D.LINE_CAP_ROUND
+    inner.antialiased = true
     root.add_child(inner)
 
     var outer := Line2D.new()
@@ -133,6 +136,7 @@ static func _build_air_blast(root: Node2D) -> void:
     outer.default_color = AIR_OUTER_COLOR
     outer.begin_cap_mode = Line2D.LINE_CAP_ROUND
     outer.end_cap_mode = Line2D.LINE_CAP_ROUND
+    outer.antialiased = true
     root.add_child(outer)
 
     var upper_wisp := Line2D.new()
@@ -147,6 +151,7 @@ static func _build_air_blast(root: Node2D) -> void:
     upper_wisp.default_color = AIR_WISP_COLOR
     upper_wisp.begin_cap_mode = Line2D.LINE_CAP_ROUND
     upper_wisp.end_cap_mode = Line2D.LINE_CAP_ROUND
+    upper_wisp.antialiased = true
     root.add_child(upper_wisp)
 
     var lower_wisp := Line2D.new()
@@ -161,4 +166,5 @@ static func _build_air_blast(root: Node2D) -> void:
     lower_wisp.default_color = AIR_WISP_COLOR
     lower_wisp.begin_cap_mode = Line2D.LINE_CAP_ROUND
     lower_wisp.end_cap_mode = Line2D.LINE_CAP_ROUND
+    lower_wisp.antialiased = true
     root.add_child(lower_wisp)
