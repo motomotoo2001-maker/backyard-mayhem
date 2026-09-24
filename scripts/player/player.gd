@@ -135,7 +135,7 @@ func _update_animation(input_direction: Vector2) -> void:
     if _action_animation != &"" and sprite.animation == _action_animation and sprite.is_playing():
         if _should_hold_action_animation(desired_state):
             return
-        _action_animation = &""
+        _release_action_animation_feedback()
 
     var desired := _resolve_animation_name(desired_state, input_direction)
     if sprite.animation != desired or not sprite.is_playing():
@@ -176,6 +176,16 @@ func _builtin_feedback_for_event(event_name: StringName, action: StringName) -> 
         return {"clear_hurt_flash": true}
     return {}
 
+func _feedback_cleanup_for_action(action: StringName) -> Dictionary:
+    match action:
+        &"fire":
+            return {"reset_weapon": true}
+        &"dash":
+            return {"reset_dash_trail": true}
+        &"hurt":
+            return {"clear_hurt_flash": true}
+    return {}
+
 func _on_animation_changed() -> void:
     _dispatch_current_frame_vfx_events()
 
@@ -198,7 +208,9 @@ func _dispatch_current_frame_vfx_events() -> void:
         animation_vfx_event.emit(event_name, action, frame)
 
 func _apply_builtin_feedback(event_name: StringName, action: StringName) -> void:
-    var response := _builtin_feedback_for_event(event_name, action)
+    _apply_feedback_response(_builtin_feedback_for_event(event_name, action))
+
+func _apply_feedback_response(response: Dictionary) -> void:
     if response.is_empty():
         return
 
@@ -226,6 +238,13 @@ func _apply_builtin_feedback(event_name: StringName, action: StringName) -> void
     if bool(response.get("clear_hurt_flash", false)) and animated_sprite != null:
         animated_sprite.modulate = Color.WHITE
 
+func _release_action_animation_feedback() -> void:
+    if _action_animation == &"":
+        return
+    var action := _animation_base_state(_action_animation)
+    _apply_feedback_response(_feedback_cleanup_for_action(action))
+    _action_animation = &""
+
 func _select_animation_state(input_direction: Vector2) -> StringName:
     if dash_component != null and is_instance_valid(dash_component) and dash_component.has_method("is_active"):
         if bool(dash_component.call("is_active")):
@@ -242,6 +261,8 @@ func _on_weapon_shot_fired(_projectile) -> void:
     var action_text := String(_action_animation)
     if action_text.begins_with("hurt") or action_text.begins_with("death") or action_text.begins_with("defeat"):
         return
+    if _action_animation != &"":
+        _release_action_animation_feedback()
     _action_animation = _resolve_animation_name(&"fire", Vector2.ZERO)
     animated_sprite.play(_action_animation)
 
@@ -251,7 +272,7 @@ func _on_animation_finished() -> void:
     if _incapacitated and _action_animation != &"" and animated_sprite.animation == _action_animation:
         return
     if _action_animation != &"" and animated_sprite.animation == _action_animation:
-        _action_animation = &""
+        _release_action_animation_feedback()
         var movement_hint := velocity.normalized() if velocity.length_squared() > 0.001 else Vector2.ZERO
         _update_animation(movement_hint)
 
@@ -261,7 +282,7 @@ func set_building(value: bool) -> void:
     _building = value
     if value:
         velocity = Vector2.ZERO
-        _action_animation = &""
+        _release_action_animation_feedback()
     _update_animation(Vector2.ZERO)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -296,6 +317,7 @@ func _on_health_changed(current: float, _maximum: float) -> void:
     _last_health = current
     if not took_damage or current <= 0.0 or _incapacitated or animated_sprite == null:
         return
+    _release_action_animation_feedback()
     _action_animation = _resolve_animation_name(&"hurt", Vector2.ZERO)
     if animated_sprite.sprite_frames.has_animation(_action_animation):
         animated_sprite.play(_action_animation)
@@ -303,6 +325,7 @@ func _on_health_changed(current: float, _maximum: float) -> void:
 func _on_health_died(_source) -> void:
     if _incapacitated:
         return
+    _release_action_animation_feedback()
     _incapacitated = true
     _revive_remaining = maxf(revive_delay, 0.05)
     set_controls_enabled(false)
@@ -316,11 +339,13 @@ func _finish_revive() -> void:
     health_component.revive(revive_fraction)
     _last_health = health_component.current_health
     _incapacitated = false
-    _action_animation = &""
+    _release_action_animation_feedback()
     if animated_sprite != null:
         animated_sprite.modulate = Color.WHITE
     if weapon_controller != null:
         weapon_controller.position = _weapon_rest_position
+    if dash_fx != null:
+        dash_fx.scale = _dash_fx_rest_scale
     set_controls_enabled(true)
     _update_animation(Vector2.ZERO)
     revived.emit()
