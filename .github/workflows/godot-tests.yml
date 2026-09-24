@@ -51,24 +51,28 @@ jobs:
             exit 1
           fi
 
-      - name: Capture backyard visual snapshots
+      - name: Capture visual snapshots
         shell: bash
         run: |
           set -o pipefail
           rm -rf artifacts
           mkdir -p artifacts
-          xvfb-run -a ./Godot_v4.7.2-stable_linux.x86_64 --path . --rendering-method gl_compatibility --script res://tests/capture_backyard_preview.gd 2>&1 | tee visual.log
-          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|ERROR:.*capture|ERROR:.*preview" visual.log; then
+          xvfb-run -a ./Godot_v4.7.2-stable_linux.x86_64 --path . --rendering-method gl_compatibility --script res://tests/capture_backyard_preview.gd 2>&1 | tee backyard-visual.log
+          xvfb-run -a ./Godot_v4.7.2-stable_linux.x86_64 --path . --rendering-method gl_compatibility --script res://tests/capture_player_vfx_preview.gd 2>&1 | tee player-vfx-visual.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|ERROR:.*capture|ERROR:.*preview" backyard-visual.log player-vfx-visual.log; then
             echo "::error::Godot visual capture reported an error"
             exit 1
           fi
           test -s artifacts/backyard-wave1.png
           test -s artifacts/backyard-damaged-tier1.png
           test -s artifacts/backyard-boss-wave5.png
+          test -s artifacts/player-vfx-preview.png
 
-      - name: Upload backyard visual snapshots
+      - name: Upload visual snapshots
         uses: actions/upload-artifact@v4
         with:
-          name: backyard-preview
-          path: artifacts/backyard-*.png
+          name: backyard-visual-previews
+          path: |
+            artifacts/backyard-*.png
+            artifacts/player-vfx-preview.png
           if-no-files-found: error
