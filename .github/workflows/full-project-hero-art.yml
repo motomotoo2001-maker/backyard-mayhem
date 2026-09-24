@@ -1,0 +1,147 @@
+name: Full Project Hero Art Build
+
+on:
+  push:
+    branches:
+      - dev/backyard-vertical-slice
+    paths:
+      - tools/art/build_new_reference_hero.py
+      - tests/python/test_authored_run_extraction_geometry.py
+      - scripts/art/hero_run_sheet_analyzer.gd
+      - tests/test_hero_run_sheet_analyzer.gd
+      - .github/workflows/full-project-hero-art.yml
+  workflow_dispatch:
+
+jobs:
+  build-hero-art:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DRIVE_FILE_ID: 15ZdOAJaLP216dY8QFPJkp8SON1vJFjgV
+    steps:
+      - name: Checkout QA/art branch
+        uses: actions/checkout@v5
+
+      - name: Install art pipeline packages
+        run: python3 -m pip install --quiet pillow numpy gdown
+
+      - name: Download canonical full project from Google Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          gdown --id "$DRIVE_FILE_ID" -O /tmp/BackyardMayhem_LATEST.zip
+          test -s /tmp/BackyardMayhem_LATEST.zip
+          mkdir -p /tmp/backyard-full
+          unzip -q /tmp/BackyardMayhem_LATEST.zip -d /tmp/backyard-full
+          ROOT="$(dirname "$(find /tmp/backyard-full -name project.godot -print -quit)")"
+          test -n "$ROOT"
+          test -f "$ROOT/project.godot"
+          echo "FULL_ROOT=$ROOT" >> "$GITHUB_ENV"
+          echo "Full project root: $ROOT"
+
+      - name: Overlay tested hero art builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$FULL_ROOT/tools/art"
+          cp tools/art/build_new_reference_hero.py "$FULL_ROOT/tools/art/build_new_reference_hero.py"
+          test -f "$FULL_ROOT/assets/source/user_pack/hero_new_8dir_movement_sheet.png"
+          test -f "$FULL_ROOT/assets/source/user_pack/hero_clean_8dir_reference.png"
+          test -f "$FULL_ROOT/assets/source/user_pack/hero_new_action_sheet.png"
+
+      - name: Build authored hero runtime frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          python3 tools/art/build_new_reference_hero.py | tee /tmp/hero-build.log
+          grep -q "run frames each: 8" /tmp/hero-build.log
+
+      - name: Verify authored RUN output and build contact sheet
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw
+          import hashlib
+          import os
+
+          root = Path(os.environ['FULL_ROOT'])
+          out = root / 'assets/runtime/characters/builder_hero'
+          directions = ['front','front_right','right','back_right','back','back_left','left','front_left']
+          frames_by_dir = {}
+          errors = []
+
+          for direction in directions:
+              frames = []
+              hashes = set()
+              for index in range(8):
+                  path = out / f'run_{direction}_{index:02d}.png'
+                  if not path.exists():
+                      errors.append(f'missing {path.name}')
+                      continue
+                  image = Image.open(path).convert('RGBA')
+                  if image.size != (320, 320):
+                      errors.append(f'{path.name}: expected 320x320, got {image.size}')
+                  alpha = image.getchannel('A')
+                  bbox = alpha.point(lambda p: 255 if p > 16 else 0).getbbox()
+                  if bbox is None:
+                      errors.append(f'{path.name}: empty alpha')
+                      continue
+                  left, top, right, bottom = bbox
+                  if top < 10:
+                      errors.append(f'{path.name}: top margin too small ({top})')
+                  if bottom > 309:
+                      errors.append(f'{path.name}: bottom exceeds safe anchor ({bottom})')
+                  if left < 5 or right > 315:
+                      errors.append(f'{path.name}: side margin unsafe ({left}, {right})')
+                  hashes.add(hashlib.sha256(image.tobytes()).hexdigest())
+                  frames.append(image)
+              if len(hashes) < 6:
+                  errors.append(f'{direction}: only {len(hashes)} unique authored run frames')
+              frames_by_dir[direction] = frames
+
+          if errors:
+              raise SystemExit('\n'.join(errors))
+
+          cell_w = 320
+          cell_h = 320
+          label_w = 150
+          sheet = Image.new('RGBA', (label_w + cell_w * 8, cell_h * 8), (28, 30, 32, 255))
+          draw = ImageDraw.Draw(sheet)
+          for row, direction in enumerate(directions):
+              draw.text((10, row * cell_h + 10), direction, fill=(240, 240, 240, 255))
+              for col, frame in enumerate(frames_by_dir[direction]):
+                  sheet.alpha_composite(frame, (label_w + col * cell_w, row * cell_h))
+          artifact_dir = Path('artifacts')
+          artifact_dir.mkdir(exist_ok=True)
+          sheet.save(artifact_dir / 'hero-authored-run-contact-sheet.png')
+          print('Verified authored RUN:', 8, 'directions x', 8, 'frames')
+          PY
+
+      - name: Package full candidate project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          rm -rf .godot
+          zip -qr /tmp/BackyardMayhem_HERO_RUN_CANDIDATE.zip . -x 'backups/*' '*.tmp'
+          sha256sum /tmp/BackyardMayhem_HERO_RUN_CANDIDATE.zip | tee /tmp/candidate.sha256
+
+      - name: Upload hero run preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: hero-authored-run-preview
+          path: artifacts/hero-authored-run-contact-sheet.png
+          if-no-files-found: error
+
+      - name: Upload full project candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: backyard-full-hero-run-candidate
+          path: |
+            /tmp/BackyardMayhem_HERO_RUN_CANDIDATE.zip
+            /tmp/candidate.sha256
+          if-no-files-found: error
+          compression-level: 0
