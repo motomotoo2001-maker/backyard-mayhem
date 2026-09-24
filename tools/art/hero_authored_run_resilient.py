@@ -66,7 +66,8 @@ def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
 
     Joined source rows can place the previous row's RUN label above the recovered
     character. Hero body silhouettes do not form a long horizontal slab in the top
-    third, so require a wide, shallow band before removing anything.
+    third, so require a wide, shallow band before removing anything. Once such a
+    band is confirmed, clear only low-alpha resize halo immediately around it.
     """
 
     rgba = image.convert("RGBA")
@@ -105,7 +106,7 @@ def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
 
     cleaned = rgba.copy()
     pixels = cleaned.load()
-    removed = False
+    removed_ranges: list[tuple[int, int]] = []
     max_band_height = max(12, int(height * 0.18))
     for start, end, peak in bands:
         band_height = end - start
@@ -117,9 +118,24 @@ def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
         for yy in range(start, end):
             for xx in range(left, right):
                 pixels[xx, yy] = (0, 0, 0, 0)
-        removed = True
+        removed_ranges.append((start, end))
 
-    return cleaned if removed else rgba
+    if not removed_ranges:
+        return rgba
+
+    # Lanczos resize can leave a 1-2 px semi-transparent halo outside a removed
+    # opaque label. Limit cleanup to a narrow neighborhood of a confirmed band
+    # and only to low-alpha pixels, so body/weapon antialiasing elsewhere stays.
+    for start, end in removed_ranges:
+        halo_top = max(top, start - 6)
+        halo_bottom = min(bottom, end + 6)
+        for yy in range(halo_top, halo_bottom):
+            for xx in range(left, right):
+                r, g, b, a = pixels[xx, yy]
+                if 0 < a <= 24:
+                    pixels[xx, yy] = (0, 0, 0, 0)
+
+    return cleaned
 
 
 def _sanitize_built_frames(paths: Sequence[Path]) -> list[Path]:
