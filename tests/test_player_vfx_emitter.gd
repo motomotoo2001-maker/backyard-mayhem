@@ -8,7 +8,11 @@ func run() -> void:
     TestUtils.assert_true(muzzle != null, "muzzle_flash must build a visible Node2D")
     if muzzle != null:
         TestUtils.assert_eq(String(muzzle.get_meta("effect_name", "")), "muzzle_flash", "muzzle node must keep effect identity")
-        TestUtils.assert_true(muzzle.get_child_count() >= 2, "muzzle flash should have outer and core geometry")
+        TestUtils.assert_true(muzzle.get_child_count() >= 4, "muzzle flash should use layered flash and spark geometry")
+        TestUtils.assert_true(muzzle.has_node("OuterFlash"), "muzzle flash needs an outer silhouette")
+        TestUtils.assert_true(muzzle.has_node("CoreFlash"), "muzzle flash needs a hot core")
+        TestUtils.assert_true(muzzle.has_node("SparkTop"), "muzzle flash needs an upper spark streak")
+        TestUtils.assert_true(muzzle.has_node("SparkBottom"), "muzzle flash needs a lower spark streak")
         TestUtils.assert_near(muzzle.rotation, 0.0, 0.001, "right-facing muzzle flash should point right")
         muzzle.free()
 
@@ -16,7 +20,11 @@ func run() -> void:
     TestUtils.assert_true(blast != null, "air_blast must build a visible Node2D")
     if blast != null:
         TestUtils.assert_eq(String(blast.get_meta("effect_name", "")), "air_blast", "air-blast node must keep effect identity")
-        TestUtils.assert_true(blast.get_child_count() >= 2, "air blast should use layered arc geometry")
+        TestUtils.assert_true(blast.get_child_count() >= 4, "air blast should use layered arcs and wisps")
+        TestUtils.assert_true(blast.has_node("InnerArc"), "air blast needs an inner pressure arc")
+        TestUtils.assert_true(blast.has_node("OuterArc"), "air blast needs an outer pressure arc")
+        TestUtils.assert_true(blast.has_node("UpperWisp"), "air blast needs an upper trailing wisp")
+        TestUtils.assert_true(blast.has_node("LowerWisp"), "air blast needs a lower trailing wisp")
         TestUtils.assert_near(blast.rotation, PI * 0.5, 0.001, "down-facing air blast should rotate with aim direction")
         blast.free()
 
