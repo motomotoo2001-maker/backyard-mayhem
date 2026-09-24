@@ -20,7 +20,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y unzip xvfb
 
       - name: Install art pipeline test packages
-        run: python3 -m pip install --quiet pillow
+        run: python3 -m pip install --quiet pillow numpy
 
       - name: Run Python art pipeline tests
         run: python3 -m unittest discover -s tests/python -p 'test_*.py'
