@@ -7,9 +7,9 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULE_PATH = ROOT / "tools" / "art" / "hero_authored_run_recovery.py"
+MODULE_PATH = ROOT / "tools" / "art" / "hero_authored_run_recovery_v2.py"
 
-spec = importlib.util.spec_from_file_location("hero_authored_run_recovery", MODULE_PATH)
+spec = importlib.util.spec_from_file_location("hero_authored_run_recovery_v2", MODULE_PATH)
 if spec is None or spec.loader is None:
     raise RuntimeError(f"Cannot load recovery module from {MODULE_PATH}")
 recovery = importlib.util.module_from_spec(spec)
@@ -30,7 +30,6 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
         col_centers = [414, 570, 731, 889, 1048, 1211, 1368, 1534]
 
         for row, cy in enumerate(row_centers):
-            # Direction chrome on the far left: must not affect RUN-column discovery.
             draw.rounded_rectangle((18, cy - 34, 128, cy + 22), radius=8, fill=(42, 46, 52, 255))
             for col, cx in enumerate(col_centers):
                 color = (55 + row * 19, 76 + col * 10, 135 + ((row + col) % 5) * 18, 255)
@@ -39,20 +38,15 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
                 draw.rounded_rectangle((cx - 38, top, cx + 37, bottom - 12), radius=10, fill=color)
                 draw.rectangle((cx - 29, bottom - 14, cx - 5, bottom), fill=color)
                 draw.rectangle((cx + 5, bottom - 14, cx + 29, bottom), fill=color)
-                # Detached weapon nub close to the body.
                 draw.rectangle((cx + 40, cy - 18, cx + 52, cy + 8), fill=color)
-                # Presentation label below the body; it must be removed.
                 draw.rectangle((cx - 30, bottom + 7, cx + 31, bottom + 14), fill=(255, 0, 0, 255))
 
-        # Reproduce the production failure: two adjacent-row poses are connected by a
-        # narrow vertical bridge, so whole-sheet connected-components sees one tall body.
         for col in (0, 4, 7):
             cx = col_centers[col]
             draw.rectangle((cx - 3, row_centers[2] + 43, cx + 3, row_centers[3] - 48), fill=(80, 90, 150, 255))
         for col in (4, 7):
             cx = col_centers[col]
             draw.rectangle((cx - 3, row_centers[5] + 43, cx + 3, row_centers[6] - 48), fill=(80, 90, 150, 255))
-
         image.save(path)
 
     def test_recovers_all_64_frames_from_joined_rows_without_labels(self):
@@ -62,7 +56,6 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
             output = root / "frames"
             contact = root / "contact.png"
             self._build_joined_sheet(source)
-
             built = recovery.build_recovered_run_frames(
                 source,
                 output,
@@ -90,7 +83,6 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
                 self.assertEqual(306, bbox[3])
                 self.assertGreaterEqual(bbox[0], 6)
                 self.assertLessEqual(bbox[2], 314)
-                # Pure-red labels are presentation chrome and must never survive.
                 red_hits = 0
                 for r, g, b, a in frame.getdata():
                     if a > 16 and r > 220 and g < 50 and b < 50:
