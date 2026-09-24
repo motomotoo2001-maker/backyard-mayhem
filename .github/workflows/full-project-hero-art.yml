@@ -6,7 +6,11 @@ on:
       - dev/backyard-vertical-slice
     paths:
       - tools/art/build_new_reference_hero.py
+      - tools/art/hero_authored_run_pipeline.py
+      - tools/art/build_full_project_hero_candidate.py
       - tests/python/test_authored_run_extraction_geometry.py
+      - tests/python/test_hero_authored_run_pipeline.py
+      - tests/python/test_build_new_reference_hero_authored_run.py
       - scripts/art/hero_run_sheet_analyzer.gd
       - tests/test_hero_run_sheet_analyzer.gd
       - .github/workflows/full-project-hero-art.yml
@@ -25,6 +29,9 @@ jobs:
       - name: Install art pipeline packages
         run: python3 -m pip install --quiet pillow numpy gdown
 
+      - name: Run authored RUN pipeline unit tests
+        run: python3 -m unittest discover -s tests/python -p 'test_*.py'
+
       - name: Download canonical full project from Google Drive
         shell: bash
         run: |
@@ -39,12 +46,14 @@ jobs:
           echo "FULL_ROOT=$ROOT" >> "$GITHUB_ENV"
           echo "Full project root: $ROOT"
 
-      - name: Overlay tested hero art builder
+      - name: Overlay tested hero art pipeline
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$FULL_ROOT/tools/art"
           cp tools/art/build_new_reference_hero.py "$FULL_ROOT/tools/art/build_new_reference_hero.py"
+          cp tools/art/hero_authored_run_pipeline.py "$FULL_ROOT/tools/art/hero_authored_run_pipeline.py"
+          cp tools/art/build_full_project_hero_candidate.py "$FULL_ROOT/tools/art/build_full_project_hero_candidate.py"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_new_8dir_movement_sheet.png"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_clean_8dir_reference.png"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_new_action_sheet.png"
@@ -54,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$FULL_ROOT"
-          python3 tools/art/build_new_reference_hero.py | tee /tmp/hero-build.log
+          python3 tools/art/build_full_project_hero_candidate.py | tee /tmp/hero-build.log
           grep -q "run frames each: 8" /tmp/hero-build.log
 
       - name: Verify authored RUN output and build contact sheet
