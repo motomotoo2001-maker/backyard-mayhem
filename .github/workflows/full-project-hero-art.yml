@@ -7,6 +7,7 @@ on:
     paths:
       - tools/art/build_new_reference_hero.py
       - tools/art/hero_authored_run_pipeline.py
+      - tools/art/hero_authored_run_resilient.py
       - tools/art/hero_authored_run_recovery.py
       - tools/art/hero_authored_run_recovery_v2.py
       - tools/art/build_full_project_hero_candidate.py
@@ -58,6 +59,7 @@ jobs:
           mkdir -p "$FULL_ROOT/tools/art"
           cp tools/art/build_new_reference_hero.py "$FULL_ROOT/tools/art/build_new_reference_hero.py"
           cp tools/art/hero_authored_run_pipeline.py "$FULL_ROOT/tools/art/hero_authored_run_pipeline.py"
+          cp tools/art/hero_authored_run_resilient.py "$FULL_ROOT/tools/art/hero_authored_run_resilient.py"
           cp tools/art/hero_authored_run_recovery.py "$FULL_ROOT/tools/art/hero_authored_run_recovery.py"
           cp tools/art/hero_authored_run_recovery_v2.py "$FULL_ROOT/tools/art/hero_authored_run_recovery_v2.py"
           cp tools/art/build_full_project_hero_candidate.py "$FULL_ROOT/tools/art/build_full_project_hero_candidate.py"
