@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Extract authored 8-direction RUN frames from the labeled hero reference sheet.
 
-The production sheet has eight directional rows. Each row contains UI chrome on
-the far left, then nine character poses: IDLE followed by RUN1..RUN8. Runtime
-output is transparent 320x320 PNG with one shared scale and a fixed bottom-center
-anchor. Rows and character slots are discovered from connected components; the
-sheet is never sliced into equal-height/equal-width cells.
+The production sheet has eight directional rows. A row may contain RUN1..RUN8
+only, or IDLE followed by RUN1..RUN8. Runtime output is transparent 320x320 PNG
+with one shared scale and a fixed bottom-center anchor. Rows and character slots
+are discovered from connected components; the sheet is never sliced into equal-
+height/equal-width cells.
 """
 
 from __future__ import annotations
@@ -174,8 +174,8 @@ def _select_character_slots(
 ) -> list[Component]:
     if len(row_components) < expected_slots:
         raise ValueError(
-            f"Row {row_index} needs {expected_slots} character slots "
-            f"(IDLE + RUN frames), found {len(row_components)}"
+            f"Row {row_index} needs {expected_slots} character slots, "
+            f"found {len(row_components)}"
         )
     if len(row_components) == expected_slots:
         slots = sorted(row_components, key=lambda component: component.center_x)
@@ -327,24 +327,27 @@ def detect_authored_run_cells(
     raw_components = _connected_components(rgba)
     candidates = [component for component in raw_components if _is_character_candidate(component, rgba.size, rows, columns)]
     row_groups = _cluster_rows(candidates, rows)
-    expected_character_slots = columns + 1
     cells: list[RunCell] = []
 
     for row_index, row_components in enumerate(row_groups):
-        slots = _select_character_slots(row_components, expected_character_slots, row_index)
-        idle_slot = slots[0]
-        run_slots = slots[1:]
+        has_idle = len(row_components) >= columns + 1
+        expected_slots = columns + 1 if has_idle else columns
+        slots = _select_character_slots(row_components, expected_slots, row_index)
+        idle_slot = slots[0] if has_idle else None
+        run_slots = slots[1:] if has_idle else slots
+        slot_offset = 1 if has_idle else 0
+
         row_center = float(median([component.center_y for component in slots]))
         row_height = float(median([component.height for component in slots]))
         median_top = float(median([component.bbox[1] for component in slots]))
         row_all = [component for component in raw_components if abs(component.center_y - row_center) <= row_height * 0.85]
 
         for run_index, primary in enumerate(run_slots):
-            slot_index = run_index + 1
+            slot_index = run_index + slot_offset
             left, right = _slot_bounds(slots, slot_index, rgba.width)
             bbox = _merge_related_bbox(primary, row_all, left, right)
             bbox, sanitize_top = _tighten_outlier_top(rgba, bbox, primary, median_top, row_height)
-            if (bbox[0] + bbox[2]) * 0.5 <= idle_slot.center_x:
+            if idle_slot is not None and (bbox[0] + bbox[2]) * 0.5 <= idle_slot.center_x:
                 raise ValueError(f"Row {row_index} RUN{run_index + 1} mapped onto IDLE")
             cells.append(RunCell(row_index, run_index, bbox, sanitize_top))
 
@@ -526,7 +529,7 @@ def build_authored_run_frames(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help="hero sheet with IDLE + RUN1..RUN8 per row")
+    parser.add_argument("source", type=Path, help="hero sheet with RUN1..RUN8, optionally preceded by IDLE")
     parser.add_argument("output_dir", type=Path, help="runtime frame destination")
     parser.add_argument("--contact-sheet", type=Path, default=None)
     parser.add_argument("--canvas-size", type=int, default=320)
