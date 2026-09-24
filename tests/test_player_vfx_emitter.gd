@@ -13,6 +13,8 @@ func run() -> void:
         TestUtils.assert_true(muzzle.has_node("CoreFlash"), "muzzle flash needs a hot core")
         TestUtils.assert_true(muzzle.has_node("SparkTop"), "muzzle flash needs an upper spark streak")
         TestUtils.assert_true(muzzle.has_node("SparkBottom"), "muzzle flash needs a lower spark streak")
+        TestUtils.assert_true((muzzle.get_node("SparkTop") as Line2D).antialiased, "upper muzzle spark should be antialiased")
+        TestUtils.assert_true((muzzle.get_node("SparkBottom") as Line2D).antialiased, "lower muzzle spark should be antialiased")
         TestUtils.assert_near(muzzle.rotation, 0.0, 0.001, "right-facing muzzle flash should point right")
         muzzle.free()
 
@@ -25,6 +27,10 @@ func run() -> void:
         TestUtils.assert_true(blast.has_node("OuterArc"), "air blast needs an outer pressure arc")
         TestUtils.assert_true(blast.has_node("UpperWisp"), "air blast needs an upper trailing wisp")
         TestUtils.assert_true(blast.has_node("LowerWisp"), "air blast needs a lower trailing wisp")
+        TestUtils.assert_true((blast.get_node("InnerArc") as Line2D).antialiased, "inner air arc should be antialiased")
+        TestUtils.assert_true((blast.get_node("OuterArc") as Line2D).antialiased, "outer air arc should be antialiased")
+        TestUtils.assert_true((blast.get_node("UpperWisp") as Line2D).antialiased, "upper air wisp should be antialiased")
+        TestUtils.assert_true((blast.get_node("LowerWisp") as Line2D).antialiased, "lower air wisp should be antialiased")
         TestUtils.assert_near(blast.rotation, PI * 0.5, 0.001, "down-facing air blast should rotate with aim direction")
         blast.free()
 
