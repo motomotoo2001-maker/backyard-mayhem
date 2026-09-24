@@ -35,50 +35,65 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
     LABEL_SENTINEL = (255, 0, 0, 255)
     GUIDE_SENTINEL = (0, 255, 0, 255)
 
-    def _build_irregular_sheet(self, path: Path) -> list[int]:
-        width, height = 960, 1060
+    def _draw_character(self, draw, cx, bottom, char_w, char_h, color):
+        left = cx - char_w // 2
+        upper = bottom - char_h
+        right = left + char_w
+        draw.rounded_rectangle(
+            (left, upper, right, bottom - 10),
+            radius=10,
+            fill=color,
+        )
+        draw.rectangle((left + 4, bottom - 12, cx - 2, bottom), fill=color)
+        draw.rectangle((cx + 2, bottom - 12, right - 4, bottom), fill=color)
+        draw.rectangle((right + 3, upper + 20, right + 8, upper + 35), fill=color)
+        return (left, upper, right + 8, bottom + 1)
+
+    def _build_real_layout_sheet(self, path: Path):
+        width, height = 1280, 1060
         image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
         draw = ImageDraw.Draw(image)
 
         row_tops = [18, 132, 260, 374, 510, 624, 770, 906]
-        cell_width = width // 8
-
-        for x in range(cell_width, width, cell_width):
-            draw.line((x, 0, x, height), fill=(225, 225, 225, 255), width=1)
+        direction_label_right = 132
+        character_left = 155
+        slot_width = (width - character_left - 18) / 9.0
+        expected_run_centers = []
 
         for row, top in enumerate(row_tops):
-            for col in range(8):
-                cx = col * cell_width + cell_width // 2
-                frame_shift = (col % 3) - 1
-                char_w = 44 + ((row + col) % 7)
-                char_h = 68 + ((row * 3 + col) % 9)
-                bottom = top + 82 + frame_shift
-                left = cx - char_w // 2
-                upper = bottom - char_h
-                right = left + char_w
+            # Real-sheet-like direction card: large/wide enough that it must be rejected
+            # as UI chrome rather than a character candidate.
+            draw.rounded_rectangle(
+                (12, top + 25, direction_label_right, top + 73),
+                radius=8,
+                fill=(42, 46, 52, 255),
+            )
+            draw.text((25, top + 40), self.DIRECTIONS[row].upper(), fill=(245, 245, 245, 255))
 
-                body_color = (
+            row_run_centers = []
+            for slot in range(9):
+                # Slot 0 is IDLE. Slots 1..8 are the authored RUN1..RUN8 frames.
+                cx = round(character_left + (slot + 0.5) * slot_width)
+                frame_shift = (slot % 3) - 1
+                char_w = 44 + ((row + slot) % 7)
+                char_h = 68 + ((row * 3 + slot) % 9)
+                bottom = top + 82 + frame_shift
+                color = (
                     48 + row * 18,
-                    72 + col * 14,
-                    150 + ((row + col) % 5) * 16,
+                    72 + slot * 11,
+                    150 + ((row + slot) % 5) * 16,
                     255,
                 )
-                draw.rounded_rectangle(
-                    (left, upper, right, bottom - 10),
-                    radius=10,
-                    fill=body_color,
-                )
-                draw.rectangle((left + 4, bottom - 12, cx - 2, bottom), fill=body_color)
-                draw.rectangle((cx + 2, bottom - 12, right - 4, bottom), fill=body_color)
-                draw.rectangle(
-                    (right + 3, upper + 20, right + 8, upper + 35),
-                    fill=body_color,
-                )
+                self._draw_character(draw, cx, bottom, char_w, char_h, color)
+                label = "IDLE" if slot == 0 else f"RUN{slot}"
                 draw.text(
                     (cx - 15, bottom + 7),
-                    f"RUN{col + 1}",
+                    label,
                     fill=self.LABEL_SENTINEL,
                 )
+                if slot > 0:
+                    row_run_centers.append(cx)
+            expected_run_centers.append(row_run_centers)
 
             draw.line(
                 (0, top + 104, width, top + 104),
@@ -86,9 +101,10 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 width=1,
             )
 
-        draw.rectangle((350, 245, 359, 270), fill=self.LABEL_SENTINEL)
+        # Detached contamination in the vertical gap between row bands.
+        draw.rectangle((430, 245, 439, 270), fill=self.LABEL_SENTINEL)
         image.save(path)
-        return row_tops
+        return row_tops, expected_run_centers
 
     def _label_sentinel_hits(self, frame: Image.Image):
         hits = []
@@ -106,11 +122,11 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 hits.append((index % frame.width, index // frame.width, (r, g, b, a)))
         return hits
 
-    def test_detects_eight_irregular_character_bands_and_ignores_labels(self):
+    def test_detects_run_slots_after_idle_in_real_sheet_layout(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             source = temp / "hero_sheet.png"
-            row_tops = self._build_irregular_sheet(source)
+            row_tops, expected_run_centers = self._build_real_layout_sheet(source)
 
             with Image.open(source) as source_image:
                 image = source_image.convert("RGBA")
@@ -122,16 +138,23 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
 
             for cell in cells:
                 expected_top = row_tops[cell.row]
+                expected_center = expected_run_centers[cell.row][cell.column]
+                actual_center = (cell.bbox[0] + cell.bbox[2]) / 2.0
                 self.assertGreaterEqual(cell.bbox[1], expected_top - 4)
                 self.assertLessEqual(cell.bbox[3], expected_top + 88)
                 self.assertGreater(cell.bbox[3] - cell.bbox[1], 55)
                 self.assertLess(cell.bbox[2] - cell.bbox[0], 90)
+                self.assertLessEqual(
+                    abs(actual_center - expected_center),
+                    16.0,
+                    f"row={cell.row} RUN{cell.column + 1} incorrectly mapped; IDLE must be skipped",
+                )
 
     def test_builds_64_transparent_320_frames_with_shared_ground_anchor(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             source = temp / "hero_sheet.png"
-            self._build_irregular_sheet(source)
+            self._build_real_layout_sheet(source)
             output = temp / "runtime"
             contact = temp / "run_contact_sheet.png"
 
@@ -170,7 +193,7 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 guide_hits = self._guide_sentinel_hits(frame)
                 self.assertFalse(
                     label_hits,
-                    f"{frame_path.name} contains RUN-label/neighbor contamination: "
+                    f"{frame_path.name} contains IDLE/RUN-label/neighbor contamination: "
                     f"count={len(label_hits)} samples={label_hits[:12]}",
                 )
                 self.assertFalse(
