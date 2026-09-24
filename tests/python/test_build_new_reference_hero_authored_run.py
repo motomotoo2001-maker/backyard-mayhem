@@ -1,10 +1,22 @@
 import ast
+import importlib.util
 import unittest
 from pathlib import Path
+
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILDER = ROOT / "tools" / "art" / "build_new_reference_hero.py"
+
+
+def _load_builder_module():
+    spec = importlib.util.spec_from_file_location("production_hero_builder_test", BUILDER)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {BUILDER}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class ProductionHeroBuildAuthoredRunTest(unittest.TestCase):
@@ -88,6 +100,31 @@ class ProductionHeroBuildAuthoredRunTest(unittest.TestCase):
             function_names,
             "production builder must use the shared extractor instead of redefining it",
         )
+
+    def test_normalize_to_canvas_keeps_off_center_weapon_inside_safe_side_margins(self):
+        builder = _load_builder_module()
+        # Synthetic action crop: the body is on the left while a long weapon/hose
+        # extends far to the right. Anchoring only the body used to clip the weapon
+        # against x=320 (the same failure seen in fire_back_00.png).
+        crop = Image.new("RGBA", (300, 190), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(crop)
+        draw.rectangle((0, 8, 94, 181), fill=(140, 90, 180, 255))
+        draw.rectangle((80, 76, 299, 104), fill=(230, 120, 40, 255))
+        normalized = builder.normalize_to_canvas(
+            crop,
+            (0, 8, 95, 174),
+            target_h=244,
+            canvas_size=(320, 320),
+            anchor_x=160,
+            ground_y=306,
+        )
+        bbox = normalized.getchannel("A").getbbox()
+        self.assertIsNotNone(bbox)
+        left, top, right, bottom = bbox
+        self.assertGreaterEqual(left, 8, f"normalized action needs >=8px left margin, got {bbox}")
+        self.assertLessEqual(right, 312, f"normalized action needs >=8px right margin, got {bbox}")
+        self.assertGreaterEqual(top, 8, f"normalized action needs >=8px top margin, got {bbox}")
+        self.assertLessEqual(bottom, 312, f"normalized action needs >=8px bottom margin, got {bbox}")
 
 
 if __name__ == "__main__":
