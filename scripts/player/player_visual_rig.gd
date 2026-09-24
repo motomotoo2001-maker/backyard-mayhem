@@ -4,8 +4,22 @@ extends RefCounted
 const WEAPON_RECOIL_PX: float = 6.0
 const DASH_TRAIL_PEAK_SCALE: float = 1.2
 const HURT_FLASH_COLOR: Color = Color(1.28, 0.68, 0.68, 1.0)
+const MUZZLE_FLASH_LIFETIME: float = 0.07
+const AIR_BLAST_LIFETIME: float = 0.14
 
 static func response_for_event(event_name: StringName, action: StringName) -> Dictionary:
+    if action == &"fire" and event_name == &"muzzle":
+        return {
+            "spawn_effect": &"muzzle_flash",
+            "effect_lifetime": MUZZLE_FLASH_LIFETIME,
+            "effect_scale": 1.0,
+        }
+    if action == &"fire" and event_name == &"air_blast":
+        return {
+            "spawn_effect": &"air_blast",
+            "effect_lifetime": AIR_BLAST_LIFETIME,
+            "effect_scale": 1.0,
+        }
     if event_name == &"recoil_peak" and action == &"fire":
         return {"weapon_recoil_px": WEAPON_RECOIL_PX}
     if event_name == &"recovery" and action == &"fire":
