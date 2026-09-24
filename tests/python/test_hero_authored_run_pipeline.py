@@ -32,8 +32,8 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         "left",
         "front_left",
     ]
-    LABEL_SENTINEL = (250, 8, 245, 255)
-    GUIDE_SENTINEL = (8, 245, 20, 255)
+    LABEL_SENTINEL = (255, 0, 0, 255)
+    GUIDE_SENTINEL = (0, 255, 0, 255)
 
     def _build_irregular_sheet(self, path: Path) -> list[int]:
         width, height = 960, 1060
@@ -94,7 +94,7 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         hits = []
         pixels = list(_pixel_data(frame))
         for index, (r, g, b, a) in enumerate(pixels):
-            if a > 12 and r > g + 70 and b > g + 70:
+            if a > 12 and r > g + 100 and r > b + 100:
                 hits.append((index % frame.width, index // frame.width, (r, g, b, a)))
         return hits
 
@@ -102,7 +102,7 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         hits = []
         pixels = list(_pixel_data(frame))
         for index, (r, g, b, a) in enumerate(pixels):
-            if a > 12 and g > r + 70 and g > b + 70:
+            if a > 12 and g > r + 100 and g > b + 100:
                 hits.append((index % frame.width, index // frame.width, (r, g, b, a)))
         return hits
 
