@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gdown --id "$DRIVE_FILE_ID" -O /tmp/BackyardMayhem_LATEST.zip
+          gdown "$DRIVE_FILE_ID" -O /tmp/BackyardMayhem_LATEST.zip
           test -s /tmp/BackyardMayhem_LATEST.zip
           mkdir -p /tmp/backyard-full
           unzip -q /tmp/BackyardMayhem_LATEST.zip -d /tmp/backyard-full
