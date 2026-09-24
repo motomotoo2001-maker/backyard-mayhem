@@ -4,6 +4,7 @@ extends CharacterBody2D
 const HeroDirectionResolver = preload("res://scripts/art/hero_direction_resolver.gd")
 const VisualFeedbackOrchestrator = preload("res://scripts/art/visual_feedback_orchestrator.gd")
 const PlayerVisualRig = preload("res://scripts/player/player_visual_rig.gd")
+const PlayerVFXEmitterScript = preload("res://scripts/player/player_vfx_emitter.gd")
 
 const ACTION_ANIMATION_PRIORITIES := {
     &"idle": 0,
@@ -47,6 +48,7 @@ var _last_vfx_dispatch_animation: StringName = &""
 var _last_vfx_dispatch_frame := -1
 var _weapon_rest_position := Vector2.ZERO
 var _dash_fx_rest_scale := Vector2.ONE
+var _vfx_emitter: Node2D = null
 
 func _ready() -> void:
     aim_area.body_entered.connect(_on_aim_body_entered)
@@ -189,9 +191,46 @@ func _dispatch_current_frame_vfx_events() -> void:
 func _apply_builtin_feedback(event_name: StringName, action: StringName) -> void:
     _apply_feedback_response(_builtin_feedback_for_event(event_name, action))
 
+func _ensure_vfx_emitter() -> Node2D:
+    if _vfx_emitter != null and is_instance_valid(_vfx_emitter):
+        return _vfx_emitter
+    _vfx_emitter = PlayerVFXEmitterScript.new()
+    _vfx_emitter.name = "PlayerVFXEmitter"
+    add_child(_vfx_emitter)
+    return _vfx_emitter
+
+func _feedback_effect_direction() -> Vector2:
+    var direction := _facing_vector
+    if aim_controller != null and is_instance_valid(aim_controller) and aim_controller.has_method("get_aim_direction"):
+        var aim_direction: Vector2 = aim_controller.get_aim_direction()
+        if aim_direction.length_squared() > 0.001:
+            direction = aim_direction.normalized()
+    if direction.length_squared() <= 0.001:
+        direction = Vector2.RIGHT
+    return direction.normalized()
+
+func _feedback_effect_origin(direction: Vector2) -> Vector2:
+    var origin := Vector2.ZERO
+    if weapon_controller != null and is_instance_valid(weapon_controller):
+        origin = weapon_controller.position
+    return origin + direction * 48.0
+
 func _apply_feedback_response(response: Dictionary) -> void:
     if response.is_empty():
         return
+
+    if response.has("spawn_effect"):
+        var direction := _feedback_effect_direction()
+        var origin := _feedback_effect_origin(direction)
+        var emitter := _ensure_vfx_emitter()
+        emitter.call(
+            "spawn_effect",
+            StringName(String(response.get("spawn_effect", ""))),
+            origin,
+            direction,
+            float(response.get("effect_scale", 1.0)),
+            float(response.get("effect_lifetime", 0.1))
+        )
 
     if response.has("weapon_recoil_px") and weapon_controller != null:
         var recoil_direction := _facing_vector
