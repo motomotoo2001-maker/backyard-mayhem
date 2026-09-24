@@ -9,6 +9,10 @@ projection-based recovery pipeline, which is independently regression-tested.
 Both extraction paths are followed by a conservative presentation-chrome cleanup.
 This specifically removes short, wide label bands that can be pulled above a pose
 when neighboring authored rows are vertically joined, without relying on label color.
+
+A final ground-stability gate rejects sequences whose support line jumps far between
+frames. This catches a visually expensive failure mode where otherwise valid authored
+poses appear to hop vertically because one crop was normalized against the wrong band.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 PRIMARY_PATH = HERE / "hero_authored_run_pipeline.py"
 RECOVERY_PATH = HERE / "hero_authored_run_recovery_v2.py"
+MAX_GROUND_DRIFT_PX = 24
 
 
 def _load_module(path: Path, name: str):
@@ -150,6 +155,79 @@ def _sanitize_built_frames(paths: Sequence[Path]) -> list[Path]:
     return sanitized
 
 
+def _parse_run_frame_name(path: Path, directions: Sequence[str]) -> tuple[str, int]:
+    stem = path.stem
+    for direction in sorted(directions, key=len, reverse=True):
+        prefix = f"run_{direction}_"
+        if not stem.startswith(prefix):
+            continue
+        raw_index = stem[len(prefix):]
+        try:
+            return direction, int(raw_index)
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid authored RUN frame index: {path.name}") from exc
+    raise RuntimeError(f"Unexpected authored RUN filename: {path.name}")
+
+
+def _validate_ground_stability(
+    paths: Sequence[Path],
+    directions: Sequence[str] = DEFAULT_DIRECTIONS,
+    ground_y: int = 292,
+    max_drift_px: int = MAX_GROUND_DRIFT_PX,
+) -> None:
+    """Reject vertically unstable authored RUN sequences before runtime publish.
+
+    Runtime RUN frames are normalized around a shared ground anchor. A small change in
+    alpha-bounds is expected as feet and the hose move, but a large support-line jump
+    almost always means a neighboring source band or wrong crop was selected.
+    """
+
+    if max_drift_px < 0:
+        raise ValueError(f"max_drift_px must be non-negative, got {max_drift_px}")
+
+    grouped: dict[str, list[tuple[int, int]]] = {direction: [] for direction in directions}
+    for raw_path in paths:
+        path = Path(raw_path)
+        direction, index = _parse_run_frame_name(path, directions)
+        with Image.open(path) as source:
+            frame = source.convert("RGBA")
+        bbox = _alpha_bbox(frame)
+        if bbox is None:
+            raise RuntimeError(f"{path.name}: empty authored RUN alpha")
+        grouped[direction].append((index, int(bbox[3])))
+
+    for direction in directions:
+        ordered = sorted(grouped[direction], key=lambda item: item[0])
+        indexes = [index for index, _bottom in ordered]
+        if indexes != list(range(8)):
+            raise RuntimeError(
+                f"{direction}: expected 8 RUN frames with indexes 0..7, got {indexes}"
+            )
+
+        bottoms = [bottom for _index, bottom in ordered]
+        drift = max(bottoms) - min(bottoms)
+        if drift > max_drift_px:
+            raise RuntimeError(
+                f"{direction}: authored RUN ground-anchor drift {drift}px exceeds "
+                f"{max_drift_px}px (ground_y={ground_y}, bottoms={bottoms})"
+            )
+
+
+def _finalize_built_frames(
+    paths: Sequence[Path],
+    directions: Sequence[str],
+    ground_y: int,
+) -> list[Path]:
+    sanitized = _sanitize_built_frames(paths)
+    _validate_ground_stability(
+        sanitized,
+        directions=directions,
+        ground_y=ground_y,
+        max_drift_px=MAX_GROUND_DRIFT_PX,
+    )
+    return sanitized
+
+
 def build_authored_run_frames(
     source_path: Path | str,
     output_dir: Path | str,
@@ -172,7 +250,7 @@ def build_authored_run_frames(
             contact_sheet_path=contact_sheet_path,
         )
         print("Authored RUN detector: connected-component primary")
-        return _sanitize_built_frames([Path(path) for path in built])
+        return _finalize_built_frames([Path(path) for path in built], directions, ground_y)
     except ValueError as primary_error:
         print(f"Primary authored RUN detector failed: {primary_error}")
         print("Authored RUN detector: projection recovery fallback")
@@ -190,4 +268,4 @@ def build_authored_run_frames(
             raise RuntimeError(
                 f"Projection recovery produced {len(built)} frames after primary failure: {primary_error}"
             )
-        return _sanitize_built_frames([Path(path) for path in built])
+        return _finalize_built_frames([Path(path) for path in built], directions, ground_y)
