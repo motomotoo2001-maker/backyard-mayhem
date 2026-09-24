@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Extract authored 8-direction RUN frames from a labeled reference sheet.
+"""Extract authored 8-direction RUN frames from the labeled hero reference sheet.
 
-The source sheet is reference-only. Runtime output is transparent 320x320 PNG
-with one shared scale and a fixed bottom-center anchor. Rows are discovered from
-character components instead of slicing the sheet into eight equal-height bands.
+The production sheet has eight directional rows. Each row contains UI chrome on
+the far left, then nine character poses: IDLE followed by RUN1..RUN8. Runtime
+output is transparent 320x320 PNG with one shared scale and a fixed bottom-center
+anchor. Rows and character slots are discovered from connected components; the
+sheet is never sliced into equal-height/equal-width cells.
 """
 
 from __future__ import annotations
@@ -123,11 +125,11 @@ def _is_character_candidate(
     component: Component,
     image_size: tuple[int, int],
     rows: int,
-    columns: int,
+    run_columns: int,
 ) -> bool:
     width, height = image_size
     min_height = max(16, height // max(1, rows * 5))
-    min_width = max(6, width // max(1, columns * 30))
+    min_width = max(6, width // max(1, run_columns * 30))
     min_pixels = max(60, (width * height) // 24000)
 
     if component.height < min_height or component.width < min_width:
@@ -135,6 +137,7 @@ def _is_character_candidate(
     if component.pixels < min_pixels:
         return False
 
+    # Direction cards are intentionally much wider than a character silhouette.
     aspect = component.width / max(1.0, float(component.height))
     if aspect < 0.18 or aspect > 1.8:
         return False
@@ -184,6 +187,50 @@ def _cluster_rows(components: Sequence[Component], row_count: int) -> list[list[
     ]
 
 
+def _select_character_slots(
+    row_components: Sequence[Component],
+    expected_slots: int,
+    row_index: int,
+) -> list[Component]:
+    """Return the dominant IDLE+RUN character silhouettes for one direction row."""
+
+    if len(row_components) < expected_slots:
+        raise ValueError(
+            f"Row {row_index} needs {expected_slots} character slots "
+            f"(IDLE + RUN frames), found {len(row_components)}"
+        )
+
+    # Small detached weapons/accessories may also qualify as candidates. The main
+    # body silhouettes are consistently the largest filled components in each row.
+    strongest = sorted(
+        row_components,
+        key=lambda component: (component.pixels, component.height, component.width),
+        reverse=True,
+    )[:expected_slots]
+    slots = sorted(strongest, key=lambda component: component.center_x)
+
+    for previous, current in zip(slots, slots[1:]):
+        if current.center_x <= previous.center_x:
+            raise ValueError(f"Row {row_index} character slots are not ordered left-to-right")
+    return slots
+
+
+def _slot_bounds(slots: Sequence[Component], slot_index: int, image_width: int) -> tuple[float, float]:
+    primary = slots[slot_index]
+    if slot_index > 0:
+        left = (slots[slot_index - 1].center_x + primary.center_x) * 0.5
+    else:
+        gap = slots[1].center_x - primary.center_x
+        left = max(0.0, primary.center_x - gap * 0.5)
+
+    if slot_index + 1 < len(slots):
+        right = (primary.center_x + slots[slot_index + 1].center_x) * 0.5
+    else:
+        gap = primary.center_x - slots[slot_index - 1].center_x
+        right = min(float(image_width), primary.center_x + gap * 0.5)
+    return left, right
+
+
 def _vertical_overlap(a: Component, b: Component) -> int:
     return max(0, min(a.bbox[3], b.bbox[3]) - max(a.bbox[1], b.bbox[1]))
 
@@ -195,7 +242,7 @@ def _merge_related_bbox(
     cell_right: float,
 ) -> tuple[int, int, int, int]:
     related = [primary]
-    slot_width = cell_right - cell_left
+    slot_width = max(1.0, cell_right - cell_left)
     expanded_left = cell_left - slot_width * 0.08
     expanded_right = cell_right + slot_width * 0.08
 
@@ -207,7 +254,7 @@ def _merge_related_bbox(
 
         # Detached authored accessories may be merged only when they share a
         # meaningful vertical span with the body. A few touching pixels are not
-        # enough: this is what prevents labels/legs from adjacent bands leaking in.
+        # enough: this prevents IDLE/RUN labels and adjacent-row fragments leaking in.
         overlap = _vertical_overlap(primary, component)
         required_overlap = max(3, int(min(primary.height, component.height) * 0.30))
         if overlap < required_overlap:
@@ -231,6 +278,8 @@ def detect_authored_run_cells(
     rows: int = 8,
     columns: int = 8,
 ) -> list[RunCell]:
+    """Detect RUN1..RUN8 in every directional row, explicitly skipping IDLE."""
+
     rgba = image.convert("RGBA")
     raw_components = _connected_components(rgba)
     candidates = [
@@ -240,49 +289,32 @@ def detect_authored_run_cells(
     ]
     row_groups = _cluster_rows(candidates, rows)
 
-    cell_width = rgba.width / float(columns)
+    expected_character_slots = columns + 1  # IDLE + RUN1..RUN8
     cells: list[RunCell] = []
 
     for row_index, row_components in enumerate(row_groups):
-        used: set[Component] = set()
-        row_center = sum(component.center_y for component in row_components) / len(row_components)
-        row_height = max(component.height for component in row_components)
+        slots = _select_character_slots(row_components, expected_character_slots, row_index)
+        idle_slot = slots[0]
+        run_slots = slots[1:]
+
+        row_center = sum(component.center_y for component in slots) / len(slots)
+        row_height = max(component.height for component in slots)
         row_all = [
             component
             for component in raw_components
-            if abs(component.center_y - row_center) <= row_height * 0.8
+            if abs(component.center_y - row_center) <= row_height * 0.80
         ]
 
-        for column in range(columns):
-            left = column * cell_width
-            right = (column + 1) * cell_width
-            center_x = (left + right) * 0.5
-            available = [component for component in row_components if component not in used]
-            in_slot = [
-                component
-                for component in available
-                if left <= component.center_x < right
-            ]
-            pool = in_slot if in_slot else available
-            if not pool:
-                raise ValueError(f"Missing character candidate at row {row_index}, column {column}")
+        for run_index, primary in enumerate(run_slots):
+            slot_index = run_index + 1
+            left, right = _slot_bounds(slots, slot_index, rgba.width)
+            bbox = _merge_related_bbox(primary, row_all, left, right)
 
-            primary = max(
-                pool,
-                key=lambda component: (
-                    component.pixels,
-                    component.height,
-                    -abs(component.center_x - center_x),
-                ),
-            )
-            used.add(primary)
-            cells.append(
-                RunCell(
-                    row_index,
-                    column,
-                    _merge_related_bbox(primary, row_all, left, right),
-                )
-            )
+            # A RUN bbox must remain to the right of the IDLE body's center. This is
+            # a cheap invariant that catches accidental remapping back onto IDLE.
+            if (bbox[0] + bbox[2]) * 0.5 <= idle_slot.center_x:
+                raise ValueError(f"Row {row_index} RUN{run_index + 1} mapped onto IDLE")
+            cells.append(RunCell(row_index, run_index, bbox))
 
     if len(cells) != rows * columns:
         raise ValueError(f"Expected {rows * columns} run cells, detected {len(cells)}")
@@ -415,7 +447,7 @@ def build_authored_run_frames(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help="8x8 authored RUN reference sheet")
+    parser.add_argument("source", type=Path, help="hero sheet with IDLE + RUN1..RUN8 per row")
     parser.add_argument("output_dir", type=Path, help="runtime frame destination")
     parser.add_argument("--contact-sheet", type=Path, default=None)
     parser.add_argument("--canvas-size", type=int, default=320)
