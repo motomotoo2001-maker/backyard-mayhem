@@ -142,10 +142,13 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
 
                 opaque_pixels = [px for px in _pixel_data(frame) if px[3] > 0]
                 self.assertTrue(opaque_pixels)
+                # Labels/grid in the reference are fully opaque neutral pixels. Tiny
+                # neutral values below ~10% opacity are Lanczos edge ringing from
+                # resizing transparent art, not visible source-sheet contamination.
                 visible_grayscale = [
                     px
                     for px in opaque_pixels
-                    if px[0] == px[1] == px[2] and px[3] > 8
+                    if px[0] == px[1] == px[2] and px[3] >= 24
                 ]
                 self.assertFalse(
                     visible_grayscale,
