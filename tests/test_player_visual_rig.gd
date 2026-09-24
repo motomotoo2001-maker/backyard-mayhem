@@ -4,6 +4,14 @@ const TestUtils = preload("res://tests/test_utils.gd")
 const PlayerVisualRig = preload("res://scripts/player/player_visual_rig.gd")
 
 func run() -> void:
+    var muzzle: Dictionary = PlayerVisualRig.response_for_event(&"muzzle", &"fire")
+    TestUtils.assert_eq(String(muzzle.get("spawn_effect", "")), "muzzle_flash", "fire muzzle event must request a muzzle-flash effect")
+    TestUtils.assert_true(float(muzzle.get("effect_lifetime", 0.0)) > 0.0, "muzzle flash must have a finite lifetime")
+
+    var air_blast: Dictionary = PlayerVisualRig.response_for_event(&"air_blast", &"fire")
+    TestUtils.assert_eq(String(air_blast.get("spawn_effect", "")), "air_blast", "fire air-blast event must request an air-blast effect")
+    TestUtils.assert_true(float(air_blast.get("effect_lifetime", 0.0)) > float(muzzle.get("effect_lifetime", 0.0)), "air blast should linger slightly longer than muzzle flash")
+
     var fire_peak: Dictionary = PlayerVisualRig.response_for_event(&"recoil_peak", &"fire")
     TestUtils.assert_eq(float(fire_peak.get("weapon_recoil_px", 0.0)), 6.0, "fire recoil peak should move the weapon mount by 6 px")
 
