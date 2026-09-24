@@ -2,6 +2,7 @@ class_name BackyardPlayer
 extends CharacterBody2D
 
 const HeroDirectionResolver = preload("res://scripts/art/hero_direction_resolver.gd")
+const VisualFeedbackOrchestrator = preload("res://scripts/art/visual_feedback_orchestrator.gd")
 
 const ACTION_ANIMATION_PRIORITIES := {
     &"idle": 0,
@@ -16,6 +17,7 @@ const ACTION_ANIMATION_PRIORITIES := {
 
 signal incapacitated
 signal revived
+signal animation_vfx_event(event_name: StringName, action: StringName, frame: int)
 
 @onready var movement_component: Node = $MovementComponent
 @onready var aim_controller: Node = $AimController
@@ -51,6 +53,7 @@ func _ready() -> void:
     weapon_controller.configure_aim_controller(aim_controller)
     weapon_controller.shot_fired.connect(_on_weapon_shot_fired)
     animated_sprite.animation_finished.connect(_on_animation_finished)
+    animated_sprite.frame_changed.connect(_on_animation_frame_changed)
     dash_component.dash_started.connect(_on_dash_started)
     dash_component.dash_finished.connect(_on_dash_finished)
 
@@ -141,6 +144,17 @@ func _animation_base_state(animation_name: StringName) -> StringName:
 
 func _action_priority(state: StringName) -> int:
     return int(ACTION_ANIMATION_PRIORITIES.get(state, 0))
+
+func _frame_vfx_events(animation_name: StringName, frame: int) -> Array[StringName]:
+    var action := _animation_base_state(animation_name)
+    return VisualFeedbackOrchestrator.hero_frame_events(action, frame)
+
+func _on_animation_frame_changed() -> void:
+    if animated_sprite == null:
+        return
+    var action := _animation_base_state(animated_sprite.animation)
+    for event_name in _frame_vfx_events(animated_sprite.animation, animated_sprite.frame):
+        animation_vfx_event.emit(event_name, action, animated_sprite.frame)
 
 func _select_animation_state(input_direction: Vector2) -> StringName:
     if dash_component != null and is_instance_valid(dash_component) and dash_component.has_method("is_active"):
