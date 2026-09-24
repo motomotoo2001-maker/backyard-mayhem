@@ -36,17 +36,15 @@ def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
     pixels = alpha.load()
     row_counts = []
     for y in range(top, bottom):
-        count = 0
-        for x in range(left, right):
-            if pixels[x, y] > 16:
-                count += 1
-        row_counts.append(count)
+        row_counts.append(sum(1 for x in range(left, right) if pixels[x, y] > 16))
     maximum = max(row_counts) if row_counts else 0
     if maximum <= 0:
         return rgba
 
-    narrow_threshold = max(3, int(maximum * 0.12))
-    search_start = max(1, int(height * 0.52))
+    # Cross-row bridges remain narrow after scaling, while two legs together stay much
+    # wider. Search only the lower half so hair/neck/weapon details cannot trigger a cut.
+    narrow_threshold = max(4, int(maximum * 0.28))
+    search_start = max(1, int(height * 0.48))
     candidate_cut = None
     index = search_start
     while index < height - 2:
@@ -62,7 +60,7 @@ def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
         above_mass = sum(row_counts[:start])
         below_mass = sum(row_counts[end:])
         below_peak = max(row_counts[end:], default=0)
-        if above_mass > 0 and 0 < below_mass <= above_mass * 0.35 and below_peak >= narrow_threshold * 2:
+        if above_mass > 0 and 0 < below_mass <= above_mass * 0.40 and below_peak >= narrow_threshold * 1.35:
             candidate_cut = start
             break
 
@@ -89,9 +87,7 @@ def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
     shifted.alpha_composite(image, (0, shift_y))
     normalized_bbox = shifted.getchannel("A").point(lambda value: 255 if value > 16 else 0).getbbox()
     if normalized_bbox is None or normalized_bbox[3] != ground_y:
-        raise ValueError(
-            f"Could not normalize {path.name} to ground {ground_y}; bbox={normalized_bbox}"
-        )
+        raise ValueError(f"Could not normalize {path.name} to ground {ground_y}; bbox={normalized_bbox}")
     if normalized_bbox[1] < 6:
         raise ValueError(f"Ground normalization clips top margin in {path.name}: {normalized_bbox[1]}")
     shifted.save(path)
