@@ -113,6 +113,11 @@ def _authored_run_adapter(
     canvas_size,
     ground_y: int,
 ):
+    """Explicit recovery utility kept for diagnostics/manual repair only.
+
+    Production staging intentionally does not monkeypatch this adapter into the builder.
+    The full candidate must pass the same shared extractor that production uses.
+    """
     size = int(canvas_size[0] if isinstance(canvas_size, tuple) else canvas_size)
     if isinstance(canvas_size, tuple) and canvas_size[0] != canvas_size[1]:
         raise ValueError(f"Authored RUN runtime canvas must be square, got {canvas_size}")
@@ -247,25 +252,10 @@ def main() -> None:
     args = _parse_args()
     builder = _load_module(BUILDER_PATH, "backyard_hero_builder")
     pipeline = _load_module(PIPELINE_PATH, "backyard_authored_run_pipeline")
-    recovery = _load_module(RECOVERY_PATH, "backyard_authored_run_recovery_v2")
     _print_sheet_diagnostics(pipeline, builder.MOVE_SRC)
 
-    def build_authored_run_frames(
-        source_path,
-        directions=builder.DIRECTIONS,
-        canvas_size=builder.CANVAS,
-        ground_y=builder.ANCHOR[1],
-    ):
-        return _authored_run_adapter(
-            pipeline,
-            recovery,
-            source_path,
-            directions=directions,
-            canvas_size=canvas_size,
-            ground_y=ground_y,
-        )
-
-    builder.build_authored_run_frames = build_authored_run_frames
+    # Do not monkeypatch builder.build_authored_run_frames here. Candidate staging
+    # must exercise the exact shared production extractor imported by the builder.
     movement = builder.movement_frames()
     actions = builder.action_frames(movement)
 
