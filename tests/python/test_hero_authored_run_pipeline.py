@@ -32,6 +32,8 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         "left",
         "front_left",
     ]
+    LABEL_SENTINEL = (250, 8, 245, 255)
+    GUIDE_SENTINEL = (8, 245, 20, 255)
 
     def _build_irregular_sheet(self, path: Path) -> list[int]:
         width, height = 960, 1060
@@ -41,6 +43,7 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         row_tops = [18, 132, 260, 374, 510, 624, 770, 906]
         cell_width = width // 8
 
+        # Pale column grid models the real reference matte/grid behavior.
         for x in range(cell_width, width, cell_width):
             draw.line((x, 0, x, height), fill=(225, 225, 225, 255), width=1)
 
@@ -72,13 +75,40 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                     (right + 3, upper + 20, right + 8, upper + 35),
                     fill=body_color,
                 )
-                draw.text((cx - 15, bottom + 7), f"RUN{col + 1}", fill=(15, 15, 15, 255))
 
-            draw.line((0, top + 104, width, top + 104), fill=(215, 215, 215, 255), width=1)
+                # A unique sentinel makes source-label leakage testable without
+                # confusing legitimate black/gray character pixels or resize fringe.
+                draw.text(
+                    (cx - 15, bottom + 7),
+                    f"RUN{col + 1}",
+                    fill=self.LABEL_SENTINEL,
+                )
 
-        draw.rectangle((350, 245, 359, 270), fill=(12, 12, 12, 255))
+            # This intentionally foreground-colored guide is geometry noise, not matte.
+            # The extractor must reject it because it is a long 1px component.
+            draw.line(
+                (0, top + 104, width, top + 104),
+                fill=self.GUIDE_SENTINEL,
+                width=1,
+            )
+
+        # Detached contamination from the next band, where equal-row slicing would
+        # accidentally include it in the previous row.
+        draw.rectangle((350, 245, 359, 270), fill=self.LABEL_SENTINEL)
         image.save(path)
         return row_tops
+
+    def _contains_label_sentinel(self, pixels) -> bool:
+        return any(
+            a > 12 and r > g + 70 and b > g + 70
+            for r, g, b, a in pixels
+        )
+
+    def _contains_guide_sentinel(self, pixels) -> bool:
+        return any(
+            a > 12 and g > r + 70 and g > b + 70
+            for r, g, b, a in pixels
+        )
 
     def test_detects_eight_irregular_character_bands_and_ignores_labels(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -140,19 +170,15 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 center_x = (bbox[0] + bbox[2]) / 2.0
                 self.assertLessEqual(abs(center_x - 160.0), 5.0)
 
-                opaque_pixels = [px for px in _pixel_data(frame) if px[3] > 0]
-                self.assertTrue(opaque_pixels)
-                # Labels/grid in the reference are fully opaque neutral pixels. Tiny
-                # neutral values below ~10% opacity are Lanczos edge ringing from
-                # resizing transparent art, not visible source-sheet contamination.
-                visible_grayscale = [
-                    px
-                    for px in opaque_pixels
-                    if px[0] == px[1] == px[2] and px[3] >= 24
-                ]
+                pixels = [px for px in _pixel_data(frame) if px[3] > 0]
+                self.assertTrue(pixels)
                 self.assertFalse(
-                    visible_grayscale,
-                    f"{frame_path.name} contains visible RUN/grid grayscale contamination",
+                    self._contains_label_sentinel(pixels),
+                    f"{frame_path.name} contains RUN-label/neighbor contamination",
+                )
+                self.assertFalse(
+                    self._contains_guide_sentinel(pixels),
+                    f"{frame_path.name} contains guide-line contamination",
                 )
 
 
