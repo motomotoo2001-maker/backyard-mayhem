@@ -42,6 +42,8 @@ var _action_animation: StringName = &""
 var _facing_vector := Vector2(1, 1).normalized()
 var _facing_direction: String = "front_right"
 var _last_health := 0.0
+var _last_vfx_dispatch_animation: StringName = &""
+var _last_vfx_dispatch_frame := -1
 
 func _ready() -> void:
     aim_area.body_entered.connect(_on_aim_body_entered)
@@ -53,6 +55,7 @@ func _ready() -> void:
     weapon_controller.configure_aim_controller(aim_controller)
     weapon_controller.shot_fired.connect(_on_weapon_shot_fired)
     animated_sprite.animation_finished.connect(_on_animation_finished)
+    animated_sprite.animation_changed.connect(_on_animation_changed)
     animated_sprite.frame_changed.connect(_on_animation_frame_changed)
     dash_component.dash_started.connect(_on_dash_started)
     dash_component.dash_finished.connect(_on_dash_finished)
@@ -149,12 +152,25 @@ func _frame_vfx_events(animation_name: StringName, frame: int) -> Array[StringNa
     var action := _animation_base_state(animation_name)
     return VisualFeedbackOrchestrator.hero_frame_events(action, frame)
 
+func _on_animation_changed() -> void:
+    _dispatch_current_frame_vfx_events()
+
 func _on_animation_frame_changed() -> void:
+    _dispatch_current_frame_vfx_events()
+
+func _dispatch_current_frame_vfx_events() -> void:
     if animated_sprite == null:
         return
-    var action := _animation_base_state(animated_sprite.animation)
-    for event_name in _frame_vfx_events(animated_sprite.animation, animated_sprite.frame):
-        animation_vfx_event.emit(event_name, action, animated_sprite.frame)
+    var animation_name := animated_sprite.animation
+    var frame := animated_sprite.frame
+    if animation_name == _last_vfx_dispatch_animation and frame == _last_vfx_dispatch_frame:
+        return
+
+    _last_vfx_dispatch_animation = animation_name
+    _last_vfx_dispatch_frame = frame
+    var action := _animation_base_state(animation_name)
+    for event_name in _frame_vfx_events(animation_name, frame):
+        animation_vfx_event.emit(event_name, action, frame)
 
 func _select_animation_state(input_direction: Vector2) -> StringName:
     if dash_component != null and is_instance_valid(dash_component) and dash_component.has_method("is_active"):
