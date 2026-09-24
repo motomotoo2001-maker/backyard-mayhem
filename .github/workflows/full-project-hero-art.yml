@@ -15,6 +15,7 @@ on:
       - tests/python/test_build_new_reference_hero_authored_run.py
       - tests/python/test_hero_authored_run_run_only_layout.py
       - tests/python/test_hero_authored_run_projection_recovery.py
+      - tests/python/test_full_project_hero_candidate_safety.py
       - scripts/art/hero_run_sheet_analyzer.gd
       - tests/test_hero_run_sheet_analyzer.gd
       - .github/workflows/full-project-hero-art.yml
@@ -64,15 +65,18 @@ jobs:
           test -f "$FULL_ROOT/assets/source/user_pack/hero_clean_8dir_reference.png"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_new_action_sheet.png"
 
-      - name: Build authored hero runtime frames
+      - name: Stage authored hero candidate without touching runtime
         shell: bash
         run: |
           set -euo pipefail
           cd "$FULL_ROOT"
-          python3 tools/art/build_full_project_hero_candidate.py | tee /tmp/hero-build.log
-          grep -q "run frames each: 8" /tmp/hero-build.log
+          python3 tools/art/build_full_project_hero_candidate.py \
+            --candidate-dir artifacts/hero_candidate | tee /tmp/hero-stage.log
+          grep -q "run frames each: 8" /tmp/hero-stage.log
+          grep -q "Runtime unchanged" /tmp/hero-stage.log
+          test -s artifacts/hero_candidate/authored-run-contact-sheet.png
 
-      - name: Verify authored RUN output and build contact sheet
+      - name: Verify staged authored RUN output
         shell: bash
         run: |
           set -euo pipefail
@@ -83,7 +87,7 @@ jobs:
           import os
 
           root = Path(os.environ['FULL_ROOT'])
-          out = root / 'assets/runtime/characters/builder_hero'
+          out = root / 'artifacts/hero_candidate/frames'
           directions = ['front','front_right','right','back_right','back','back_left','left','front_left']
           frames_by_dir = {}
           errors = []
@@ -132,8 +136,19 @@ jobs:
           artifact_dir = Path('artifacts')
           artifact_dir.mkdir(exist_ok=True)
           sheet.save(artifact_dir / 'hero-authored-run-contact-sheet.png')
-          print('Verified authored RUN:', 8, 'directions x', 8, 'frames')
+          print('Verified staged authored RUN:', 8, 'directions x', 8, 'frames')
           PY
+
+      - name: Apply validated candidate inside disposable full-project workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          python3 tools/art/build_full_project_hero_candidate.py \
+            --candidate-dir artifacts/hero_candidate --apply | tee /tmp/hero-apply.log
+          grep -q "APPLIED validated hero candidate" /tmp/hero-apply.log
+          test -s assets/runtime/characters/builder_hero/builder_hero_frames.tres
+          test -s assets/runtime/characters/builder_hero/run_front_00.png
 
       - name: Package full candidate project
         shell: bash
