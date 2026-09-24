@@ -1,0 +1,74 @@
+name: Windows Test Build
+
+on:
+  push:
+    branches:
+      - dev/backyard-vertical-slice
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y unzip zip
+
+      - name: Download Godot 4.7.2 editor
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.2-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+
+      - name: Install matching export templates
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz
+          rm -rf template_unpack
+          mkdir -p template_unpack
+          unzip -q Godot_v4.7.2-stable_export_templates.tpz -d template_unpack
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          cp -a template_unpack/templates/. "$HOME/.local/share/godot/export_templates/4.7.2.stable/"
+          ls -lah "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+
+      - name: Parser gate
+        shell: bash
+        run: |
+          set -o pipefail
+          ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . --editor --quit 2>&1 | tee editor.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script" editor.log; then
+            echo "::error::Godot editor reported a script/parse error"
+            exit 1
+          fi
+
+      - name: Run tests
+        shell: bash
+        run: |
+          set -o pipefail
+          ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . --script res://tests/run_all.gd 2>&1 | tee tests.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script" tests.log; then
+            echo "::error::Godot tests emitted a script/parse error"
+            exit 1
+          fi
+
+      - name: Export Windows test build
+        shell: bash
+        run: |
+          mkdir -p build
+          ./Godot_v4.7.2-stable_linux.x86_64 --headless --path . --export-release "Windows Desktop" build/BackyardMayhem_TEST.exe 2>&1 | tee export.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|ERROR:.*export" export.log; then
+            echo "::error::Godot export reported an error"
+            exit 1
+          fi
+          test -s build/BackyardMayhem_TEST.exe
+          printf '%s\n' 'Backyard Mayhem TEST BUILD' '' 'Run BackyardMayhem_TEST.exe' '' 'Controls:' 'SPACE = complete/start wave' '1 / 2 / 3 = choose upgrade' 'D = damage base' 'H = repair base' 'R = reset preview' > build/README_TEST.txt
+          sha256sum build/BackyardMayhem_TEST.exe > build/SHA256.txt
+
+      - name: Upload Windows test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: BackyardMayhem-Windows-TestBuild
+          path: build/*
+          if-no-files-found: error
