@@ -61,6 +61,20 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
         self.assertIn("if args.apply", main_source)
         self.assertNotIn("builder.OUT = builder.ROOT / 'assets/runtime", main_source)
 
+    def test_candidate_builder_does_not_monkeypatch_production_run_extractor(self):
+        main = self._function("main")
+        assignments = [node for node in ast.walk(main) if isinstance(node, (ast.Assign, ast.AnnAssign))]
+        for assignment in assignments:
+            target = assignment.target if isinstance(assignment, ast.AnnAssign) else assignment.targets[0]
+            if not isinstance(target, ast.Attribute):
+                continue
+            if isinstance(target.value, ast.Name) and target.value.id == "builder":
+                self.assertNotEqual(
+                    "build_authored_run_frames",
+                    target.attr,
+                    "full-project candidate must not monkeypatch the production authored RUN extractor",
+                )
+
     def test_legacy_action_edge_touch_does_not_block_authored_run_candidate(self):
         module = _load_candidate_module()
         with tempfile.TemporaryDirectory() as temp_dir:
