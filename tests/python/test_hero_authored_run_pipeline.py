@@ -16,6 +16,11 @@ pipeline = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pipeline)
 
 
+def _pixel_data(image: Image.Image):
+    getter = getattr(image, "get_flattened_data", None)
+    return getter() if getter is not None else image.getdata()
+
+
 class HeroAuthoredRunPipelineTest(unittest.TestCase):
     DIRECTIONS = [
         "front",
@@ -33,8 +38,6 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
         draw = ImageDraw.Draw(image)
 
-        # Intentionally irregular Y bands. A naive height/8 crop cuts through labels
-        # and adjacent rows; the authored pipeline must discover character bands.
         row_tops = [18, 132, 260, 374, 510, 624, 770, 906]
         cell_width = width // 8
 
@@ -52,7 +55,6 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 upper = bottom - char_h
                 right = left + char_w
 
-                # One connected character silhouette with a narrow body and feet.
                 body_color = (
                     48 + row * 18,
                     72 + col * 14,
@@ -66,21 +68,14 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 )
                 draw.rectangle((left + 4, bottom - 12, cx - 2, bottom), fill=body_color)
                 draw.rectangle((cx + 2, bottom - 12, right - 4, bottom), fill=body_color)
-
-                # A small disconnected authored accessory belongs to the character.
                 draw.rectangle(
                     (right + 3, upper + 20, right + 8, upper + 35),
                     fill=body_color,
                 )
-
-                # Labels are deliberately close enough that an oversized crop grabs them.
                 draw.text((cx - 15, bottom + 7), f"RUN{col + 1}", fill=(15, 15, 15, 255))
 
-            # Long horizontal guide line should never be mistaken for character art.
             draw.line((0, top + 104, width, top + 104), fill=(215, 215, 215, 255), width=1)
 
-        # Detached contamination from the next band, positioned where equal-row slicing
-        # would include it in the previous row.
         draw.rectangle((350, 245, 359, 270), fill=(12, 12, 12, 255))
         image.save(path)
         return row_tops
@@ -91,7 +86,8 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
             source = temp / "hero_sheet.png"
             row_tops = self._build_irregular_sheet(source)
 
-            image = Image.open(source).convert("RGBA")
+            with Image.open(source) as source_image:
+                image = source_image.convert("RGBA")
             cells = pipeline.detect_authored_run_cells(image, rows=8, columns=8)
 
             self.assertEqual(64, len(cells))
@@ -124,7 +120,8 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
 
             self.assertEqual(64, len(built))
             self.assertTrue(contact.is_file())
-            self.assertEqual((8 * 160, 8 * 160), Image.open(contact).size)
+            with Image.open(contact) as contact_image:
+                self.assertEqual((8 * 160, 8 * 160), contact_image.size)
 
             expected_names = {
                 f"run_{direction}_{frame:02d}.png"
@@ -134,7 +131,8 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
             self.assertEqual(expected_names, {path.name for path in built})
 
             for frame_path in built:
-                frame = Image.open(frame_path).convert("RGBA")
+                with Image.open(frame_path) as frame_file:
+                    frame = frame_file.convert("RGBA")
                 self.assertEqual((320, 320), frame.size)
                 bbox = frame.getchannel("A").getbbox()
                 self.assertIsNotNone(bbox)
@@ -142,11 +140,16 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 center_x = (bbox[0] + bbox[2]) / 2.0
                 self.assertLessEqual(abs(center_x - 160.0), 5.0)
 
-                # Synthetic labels/guides are grayscale. The runtime frame should contain
-                # only the colored character/accessory pixels, never RUN text or grid lines.
-                opaque_pixels = [px for px in frame.getdata() if px[3] > 0]
+                opaque_pixels = [px for px in _pixel_data(frame) if px[3] > 0]
                 self.assertTrue(opaque_pixels)
-                self.assertFalse(any(r == g == b for r, g, b, _a in opaque_pixels))
+                grayscale = [px for px in opaque_pixels if px[0] == px[1] == px[2]]
+                if grayscale:
+                    max_alpha = max(px[3] for px in grayscale)
+                    unique_preview = sorted(set(grayscale), key=lambda px: px[3], reverse=True)[:8]
+                    self.fail(
+                        f"{frame_path.name}: grayscale_count={len(grayscale)}, "
+                        f"max_alpha={max_alpha}, samples={unique_preview}"
+                    )
 
 
 if __name__ == "__main__":
