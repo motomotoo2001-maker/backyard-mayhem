@@ -34,10 +34,11 @@ class BuildNewReferenceHeroAuthoredFireTest(unittest.TestCase):
             source_path = temp / "action_sheet.png"
             Image.new("RGBA", (1280, 960), (0, 0, 0, 0)).save(source_path)
             original_action_src = builder.ACTION_SRC
-            original_extractor = builder.build_authored_fire_frames
+            original_fire_extractor = builder.build_authored_fire_frames
+            original_legacy_extractor = builder.extract_cell
             calls = []
 
-            def fake_extractor(source, output_dir, directions, row_bands, canvas_size, ground_y):
+            def fake_fire_extractor(source, output_dir, directions, row_bands, canvas_size, ground_y):
                 calls.append((Path(source), tuple(directions), tuple(row_bands), canvas_size, ground_y))
                 output = Path(output_dir)
                 output.mkdir(parents=True, exist_ok=True)
@@ -50,13 +51,19 @@ class BuildNewReferenceHeroAuthoredFireTest(unittest.TestCase):
                         built.append(path)
                 return built
 
+            def fake_legacy_extractor(_image, _box, _keep_near=False):
+                crop = Image.new("RGBA", (48, 80), (80, 100, 120, 255))
+                return crop, (0, 0, crop.width, crop.height)
+
             try:
                 builder.ACTION_SRC = source_path
-                builder.build_authored_fire_frames = fake_extractor
+                builder.build_authored_fire_frames = fake_fire_extractor
+                builder.extract_cell = fake_legacy_extractor
                 actions = builder.action_frames(movement)
             finally:
                 builder.ACTION_SRC = original_action_src
-                builder.build_authored_fire_frames = original_extractor
+                builder.build_authored_fire_frames = original_fire_extractor
+                builder.extract_cell = original_legacy_extractor
 
         self.assertEqual(1, len(calls), "authored FIRE extractor should be called once")
         source, directions, row_bands, canvas_size, ground_y = calls[0]
