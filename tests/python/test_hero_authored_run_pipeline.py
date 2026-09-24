@@ -8,12 +8,19 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE_PATH = ROOT / "tools" / "art" / "hero_authored_run_pipeline.py"
+RESILIENT_PATH = ROOT / "tools" / "art" / "hero_authored_run_resilient.py"
 
 spec = importlib.util.spec_from_file_location("hero_authored_run_pipeline", MODULE_PATH)
 if spec is None or spec.loader is None:
     raise RuntimeError(f"Cannot load pipeline module from {MODULE_PATH}")
 pipeline = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pipeline)
+
+resilient_spec = importlib.util.spec_from_file_location("hero_authored_run_resilient", RESILIENT_PATH)
+if resilient_spec is None or resilient_spec.loader is None:
+    raise RuntimeError(f"Cannot load resilient pipeline module from {RESILIENT_PATH}")
+resilient = importlib.util.module_from_spec(resilient_spec)
+resilient_spec.loader.exec_module(resilient)
 
 
 def _pixel_data(image: Image.Image):
@@ -93,7 +100,6 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 draw.rectangle((cx + 5, bottom - 14, cx + 29, bottom), fill=color)
                 draw.rectangle((cx + 40, cy - 18, cx + 52, cy + 8), fill=color)
                 draw.rectangle((cx - 30, bottom + 7, cx + 31, bottom + 14), fill=self.LABEL_SENTINEL)
-        # Deliberately bridge adjacent rows in selected columns, reproducing the real sheet failure.
         for col in (0, 4, 7):
             cx = col_centers[col]
             draw.rectangle((cx - 3, row_centers[2] + 43, cx + 3, row_centers[3] - 48), fill=(80, 90, 150, 255))
@@ -163,13 +169,13 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 self.assertFalse(self._label_sentinel_hits(frame))
                 self.assertFalse(self._guide_sentinel_hits(frame))
 
-    def test_shared_pipeline_recovers_all_frames_when_adjacent_rows_are_joined(self):
+    def test_resilient_production_pipeline_recovers_all_frames_when_adjacent_rows_are_joined(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             source = temp / "joined.png"
             output = temp / "runtime"
             self._build_vertically_joined_sheet(source)
-            built = pipeline.build_authored_run_frames(
+            built = resilient.build_authored_run_frames(
                 source,
                 output,
                 directions=self.DIRECTIONS,
