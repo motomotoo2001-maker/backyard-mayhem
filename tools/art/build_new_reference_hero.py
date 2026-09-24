@@ -108,9 +108,10 @@ def normalize_to_canvas(
     ground_y=ANCHOR[1],
 ):
     mx, my, mw, mh = main_rel
+    safe_margin = 8
     scale = target_h / max(1, mh)
-    max_w = max(1, canvas_size[0] - 14)
-    max_h = max(1, ground_y - 6)
+    max_w = max(1, canvas_size[0] - safe_margin * 2)
+    max_h = max(1, canvas_size[1] - safe_margin * 2)
     scale = min(scale, max_w / max(1, crop.width), max_h / max(1, crop.height))
     nw = max(1, round(crop.width * scale))
     nh = max(1, round(crop.height * scale))
@@ -119,6 +120,15 @@ def normalize_to_canvas(
     main_center_x = (mx + mw / 2) * scale
     px = round(anchor_x - main_center_x)
     py = round(ground_y - main_bottom)
+
+    # Prefer the shared body/ground anchor, but never sacrifice the full silhouette.
+    # Long leaf-blower / hose poses can be strongly off-center, so after anchoring
+    # clamp the whole trimmed crop into a guaranteed 8 px runtime safe area.
+    max_px = canvas_size[0] - safe_margin - nw
+    max_py = canvas_size[1] - safe_margin - nh
+    px = min(max(px, safe_margin), max_px)
+    py = min(max(py, safe_margin), max_py)
+
     canvas = Image.new('RGBA', canvas_size, (0, 0, 0, 0))
     canvas.alpha_composite(resized, (px, py))
     return canvas
