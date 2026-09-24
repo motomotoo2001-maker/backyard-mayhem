@@ -1,8 +1,16 @@
 from pathlib import Path
+import sys
+import tempfile
+
 from PIL import Image
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.art.hero_authored_run_pipeline import build_authored_run_frames
+
 MOVE_SRC = ROOT / 'assets/source/user_pack/hero_new_8dir_movement_sheet.png'
 CLEAN_SRC = ROOT / 'assets/source/user_pack/hero_clean_8dir_reference.png'
 ACTION_SRC = ROOT / 'assets/source/user_pack/hero_new_action_sheet.png'
@@ -122,96 +130,6 @@ def subtle_idle(base: Image.Image, dy: int):
     return out
 
 
-def white_background_to_rgba(image: Image.Image):
-    """Convert presentation-sheet white background to clean alpha without OCR."""
-    rgb = np.array(image.convert('RGB')).astype(np.float32)
-    distance = 255.0 - rgb.min(axis=2)
-    alpha = np.clip((distance - 5.0) * 10.0, 0.0, 255.0)
-    af = np.maximum(alpha / 255.0, 1e-4)
-    foreground = (rgb - 255.0 * (1.0 - af[:, :, None])) / af[:, :, None]
-    rgba = np.dstack([
-        np.clip(foreground, 0, 255).astype(np.uint8),
-        alpha.astype(np.uint8),
-    ])
-    return Image.fromarray(rgba, 'RGBA')
-
-
-def _column_character_candidates(sheet_rgba: Image.Image, x0: int, x1: int, expected_rows: int):
-    """Find the dominant character body in each non-uniform row for one RUN column."""
-    column = sheet_rgba.crop((x0, 0, x1, sheet_rgba.height))
-    alpha = np.array(column)[:, :, 3]
-    _, comps = component_boxes(alpha, 120)
-    min_h = max(48, int(sheet_rgba.height / expected_rows * 0.28))
-    min_w = max(18, int((x1 - x0) * 0.10))
-    candidates = []
-    for comp in comps:
-        area, _, _, y, w, h = comp
-        # RUN labels are short/wide. A character body is tall and occupies meaningful area.
-        if h < min_h or w < min_w:
-            continue
-        if w / max(1, h) > 2.2:
-            continue
-        candidates.append(comp)
-    if len(candidates) < expected_rows:
-        raise RuntimeError(
-            f'authored RUN extraction found only {len(candidates)} character rows in column '
-            f'{x0}:{x1}; expected {expected_rows}'
-        )
-    # If the sheet contains extra large decorations, keep the strongest expected_rows bodies,
-    # then restore their real top-to-bottom ordering. No equal-height row slicing is used.
-    candidates = sorted(candidates, key=lambda item: item[0], reverse=True)[:expected_rows]
-    candidates.sort(key=lambda item: item[3] + item[5] / 2.0)
-    return candidates
-
-
-def build_authored_run_frames(
-    source_path,
-    directions=DIRECTIONS,
-    canvas_size=CANVAS,
-    ground_y=ANCHOR[1],
-):
-    """Extract 8 authored RUN frames for every direction from the presentation sheet.
-
-    The movement sheet has non-uniform vertical row spacing, so equal H/8 row slicing is
-    intentionally forbidden. Each of the eight horizontal RUN columns is analysed by
-    connected components; tall character bodies establish the real row centres while
-    short/wide RUN labels are ignored.
-    """
-    source = Image.open(source_path)
-    sheet = white_background_to_rgba(source)
-    width, height = sheet.size
-    frame_count = 8
-    row_count = len(directions)
-    col_width = width / float(frame_count)
-
-    per_column = []
-    for col in range(frame_count):
-        x0 = int(round(col * col_width))
-        x1 = int(round((col + 1) * col_width))
-        per_column.append(_column_character_candidates(sheet, x0, x1, row_count))
-
-    result = {direction: [] for direction in directions}
-    for row, direction in enumerate(directions):
-        for col in range(frame_count):
-            x0 = int(round(col * col_width))
-            x1 = int(round((col + 1) * col_width))
-            main = per_column[col][row]
-            _, _, _, y, _, h = main
-            pad_y = max(20, int(h * 0.18))
-            y0 = max(0, y - pad_y)
-            y1 = min(height, y + h + pad_y)
-            crop, main_rel = extract_cell(sheet, (x0, y0, x1, y1), keep_near=True)
-            frame = normalize_to_canvas(
-                crop,
-                main_rel,
-                canvas_size=canvas_size,
-                anchor_x=canvas_size[0] // 2,
-                ground_y=ground_y,
-            )
-            result[direction].append(frame)
-    return result
-
-
 def clean_reference_frames():
     im = Image.open(CLEAN_SRC).convert('RGB')
     W, H = im.size
@@ -239,12 +157,28 @@ def clean_reference_frames():
 
 def movement_frames():
     clean = clean_reference_frames()
-    authored_run = build_authored_run_frames(
-        MOVE_SRC,
-        directions=DIRECTIONS,
-        canvas_size=CANVAS,
-        ground_y=ANCHOR[1],
-    )
+    authored_run = {direction: [] for direction in DIRECTIONS}
+
+    # The shared extractor is the only source of production RUN frames. It already
+    # handles the non-uniform row bands, skips IDLE/RUN labels, removes presentation
+    # matte, and writes the shared 320x320 ground-anchored runtime layout.
+    with tempfile.TemporaryDirectory(prefix='backyard-hero-authored-run-') as temp_dir:
+        stage = Path(temp_dir)
+        build_authored_run_frames(
+            MOVE_SRC,
+            stage,
+            directions=DIRECTIONS,
+            canvas_size=CANVAS[0],
+            ground_y=ANCHOR[1],
+        )
+        for direction in DIRECTIONS:
+            for index in range(8):
+                frame_path = stage / f'run_{direction}_{index:02d}.png'
+                if not frame_path.is_file():
+                    raise RuntimeError(f'missing authored RUN frame: {frame_path.name}')
+                with Image.open(frame_path) as frame_file:
+                    authored_run[direction].append(frame_file.convert('RGBA').copy())
+
     result = {}
     for direction in DIRECTIONS:
         base = clean[direction]
