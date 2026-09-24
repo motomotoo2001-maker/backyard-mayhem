@@ -142,14 +142,15 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
 
                 opaque_pixels = [px for px in _pixel_data(frame) if px[3] > 0]
                 self.assertTrue(opaque_pixels)
-                grayscale = [px for px in opaque_pixels if px[0] == px[1] == px[2]]
-                if grayscale:
-                    max_alpha = max(px[3] for px in grayscale)
-                    unique_preview = sorted(set(grayscale), key=lambda px: px[3], reverse=True)[:8]
-                    self.fail(
-                        f"{frame_path.name}: grayscale_count={len(grayscale)}, "
-                        f"max_alpha={max_alpha}, samples={unique_preview}"
-                    )
+                visible_grayscale = [
+                    px
+                    for px in opaque_pixels
+                    if px[0] == px[1] == px[2] and px[3] > 8
+                ]
+                self.assertFalse(
+                    visible_grayscale,
+                    f"{frame_path.name} contains visible RUN/grid grayscale contamination",
+                )
 
 
 if __name__ == "__main__":
