@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build hero runtime art with authored RUN frames without risking live runtime assets.
+"""Build reviewed hero runtime art without risking live runtime assets.
 
 Default mode writes a complete candidate into artifacts/hero_candidate. Nothing in
-assets/runtime is changed until the operator has visually reviewed the contact sheet
-and reruns this command with --apply.
+assets/runtime is changed until the operator has visually reviewed the authored RUN
+and FIRE contact sheets and reruns this command with --apply.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _parse_args() -> argparse.Namespace:
         "--candidate-dir",
         type=Path,
         default=DEFAULT_CANDIDATE_DIR,
-        help="staging directory for reviewed hero frames and contact sheet",
+        help="staging directory for reviewed hero frames and contact sheets",
     )
     parser.add_argument(
         "--apply",
@@ -146,6 +146,48 @@ def _authored_run_adapter(
         return _load_frames_from_paths(built, directions)
 
 
+def _validate_authored_fire_frames(
+    frames_dir: Path,
+    generated,
+    directions: Sequence[str],
+    canvas_size,
+    ground_y: int,
+) -> None:
+    """Require a real three-pose FIRE sequence plus one recovery frame per direction."""
+    expected_size = tuple(canvas_size) if isinstance(canvas_size, tuple) else (int(canvas_size), int(canvas_size))
+    if not 0 < int(ground_y) < expected_size[1]:
+        raise RuntimeError(f"Invalid shared hero FIRE ground anchor: {ground_y}")
+
+    for direction in directions:
+        names = list(generated.get(("fire", direction), []))
+        if len(names) != 4:
+            raise RuntimeError(f"{direction}: expected 4 FIRE frames (3 authored + recovery), got {len(names)}")
+
+        unique_authored: set[bytes] = set()
+        for frame_index, name in enumerate(names):
+            path = frames_dir / name
+            if not path.is_file():
+                raise RuntimeError(f"Missing FIRE candidate frame: {name}")
+            with Image.open(path) as source:
+                frame = source.convert("RGBA")
+            if frame.size != expected_size:
+                raise RuntimeError(f"{name}: expected canvas {expected_size}, got {frame.size}")
+            bbox = frame.getchannel("A").getbbox()
+            if bbox is None:
+                raise RuntimeError(f"{name}: empty FIRE alpha")
+            left, top, right, bottom = bbox
+            if left < 8 or top < 8 or expected_size[0] - right < 8 or expected_size[1] - bottom < 8:
+                raise RuntimeError(f"{name}: authored FIRE safe-margin violation: {bbox}")
+            if frame_index < 3:
+                unique_authored.add(frame.tobytes())
+
+        if len(unique_authored) != 3:
+            raise RuntimeError(
+                f"{direction}: FIRE sequence has only {len(unique_authored)} unique authored poses; "
+                "expected three distinct firing poses before recovery"
+            )
+
+
 def _validate_candidate_frames(
     frames_dir: Path,
     generated,
@@ -158,9 +200,8 @@ def _validate_candidate_frames(
         raise RuntimeError(f"Invalid shared hero ground anchor: {ground_y}")
 
     # Baseline contract for every state: the resource must exist, be non-empty and
-    # use the production canvas. Legacy action art has separate visual debt and must
-    # not block the authored-RUN replacement milestone merely because it touches an
-    # edge; RUN gets the strict safe-margin contract below.
+    # use the production canvas. States already promoted to authored production art
+    # receive stricter state-specific validation below.
     names = sorted({name for frame_names in generated.values() for name in frame_names})
     if not names:
         raise RuntimeError("Hero candidate did not generate any frames")
@@ -175,13 +216,13 @@ def _validate_candidate_frames(
         bbox = frame.getchannel("A").getbbox()
         if bbox is None:
             raise RuntimeError(f"{name}: empty alpha")
-        if not name.startswith("run_") and (
+        if not name.startswith(("run_", "fire_")) and (
             bbox[0] <= 0
             or bbox[1] <= 0
             or bbox[2] >= expected_size[0]
             or bbox[3] >= expected_size[1]
         ):
-            print(f"WARNING: legacy non-RUN frame touches runtime canvas edge: {name} {bbox}")
+            print(f"WARNING: legacy non-authored frame touches runtime canvas edge: {name} {bbox}")
 
     # RUN gets the stricter production contract: 8 authored frames per direction,
     # safe margins and meaningful pose variation (not a duplicated static frame).
@@ -205,6 +246,8 @@ def _validate_candidate_frames(
                 "refusing static/procedural-looking candidate"
             )
 
+    _validate_authored_fire_frames(frames_dir, generated, directions, expected_size, ground_y)
+
     spriteframes = frames_dir / "builder_hero_frames.tres"
     if not spriteframes.is_file() or spriteframes.stat().st_size <= 0:
         raise RuntimeError("Candidate SpriteFrames resource was not generated")
@@ -224,6 +267,29 @@ def _write_run_contact_sheet(frames_dir: Path, generated, directions: Sequence[s
             draw.text(
                 (column * tile + 4, row * tile + 4),
                 f"{direction} {column + 1}",
+                fill=(245, 245, 245, 255),
+            )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(path)
+
+
+def _write_fire_contact_sheet(frames_dir: Path, generated, directions: Sequence[str], path: Path) -> None:
+    tile = 120
+    sheet = Image.new("RGBA", (4 * tile, len(directions) * tile), (28, 32, 36, 255))
+    draw = ImageDraw.Draw(sheet)
+    for row, direction in enumerate(directions):
+        names = list(generated[("fire", direction)])
+        if len(names) != 4:
+            raise RuntimeError(f"{direction}: FIRE contact sheet expected 4 frames, got {len(names)}")
+        for column, name in enumerate(names):
+            with Image.open(frames_dir / name) as source:
+                frame = source.convert("RGBA")
+            thumb = frame.resize((tile, tile), Image.Resampling.LANCZOS)
+            sheet.alpha_composite(thumb, (column * tile, row * tile))
+            label = "REC" if column == 3 else f"F{column + 1}"
+            draw.text(
+                (column * tile + 4, row * tile + 4),
+                f"{direction} {label}",
                 fill=(245, 245, 245, 255),
             )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -254,8 +320,9 @@ def main() -> None:
     pipeline = _load_module(PIPELINE_PATH, "backyard_authored_run_pipeline")
     _print_sheet_diagnostics(pipeline, builder.MOVE_SRC)
 
-    # Do not monkeypatch builder.build_authored_run_frames here. Candidate staging
-    # must exercise the exact shared production extractor imported by the builder.
+    # Candidate staging exercises the exact shared production extractors imported
+    # by the builder. No monkeypatch is allowed here: if RUN or FIRE extraction is
+    # not production-safe, the full-project candidate must fail before apply.
     movement = builder.movement_frames()
     actions = builder.action_frames(movement)
 
@@ -281,18 +348,23 @@ def main() -> None:
         builder.CANVAS,
         builder.ANCHOR[1],
     )
-    contact_sheet = candidate_dir / "authored-run-contact-sheet.png"
-    _write_run_contact_sheet(frames_dir, generated, builder.DIRECTIONS, contact_sheet)
+    run_contact_sheet = candidate_dir / "authored-run-contact-sheet.png"
+    fire_contact_sheet = candidate_dir / "authored-fire-contact-sheet.png"
+    _write_run_contact_sheet(frames_dir, generated, builder.DIRECTIONS, run_contact_sheet)
+    _write_fire_contact_sheet(frames_dir, generated, builder.DIRECTIONS, fire_contact_sheet)
 
     run_count = len(generated[("run", "front")])
+    fire_count = len(generated[("fire", "front")])
     print("movement directions:", len(builder.DIRECTIONS), "run frames each:", run_count)
+    print("fire frames each:", fire_count, "(3 authored + recovery)")
     print(
         "build:", len(generated[("build", "generic")]),
         "hurt:", len(generated[("hurt", "generic")]),
         "defeat:", len(generated[("defeat", "generic")]),
     )
     print(f"Candidate validated: {candidate_dir}")
-    print(f"Review contact sheet: {contact_sheet}")
+    print(f"Review RUN contact sheet: {run_contact_sheet}")
+    print(f"Review FIRE contact sheet: {fire_contact_sheet}")
 
     if args.apply:
         _publish_candidate(frames_dir, runtime_dir)
