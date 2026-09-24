@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.art.hero_authored_run_pipeline import build_authored_run_frames
+from tools.art.hero_authored_run_resilient import build_authored_run_frames
 
 MOVE_SRC = ROOT / 'assets/source/user_pack/hero_new_8dir_movement_sheet.png'
 CLEAN_SRC = ROOT / 'assets/source/user_pack/hero_clean_8dir_reference.png'
