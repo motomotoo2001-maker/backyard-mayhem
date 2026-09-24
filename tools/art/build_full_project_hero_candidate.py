@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""Build hero runtime art in the canonical full project using the tested authored RUN pipeline.
-
-This is intentionally a small integration bridge: the legacy production builder still owns
-idle/fire/build/hurt/defeat and SpriteFrames generation, while RUN1..RUN8 extraction is
-delegated to hero_authored_run_pipeline.py, whose row/slot detection is covered by dedicated
-geometry tests.
-"""
+"""Build hero runtime art in the canonical full project using the tested authored RUN pipeline."""
 
 from __future__ import annotations
 
 import importlib.util
 import tempfile
 from pathlib import Path
+from statistics import median
 from typing import Sequence
 
 from PIL import Image
@@ -29,6 +24,30 @@ def _load_module(path: Path, name: str):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _print_sheet_diagnostics(pipeline, source_path: Path) -> None:
+    with Image.open(source_path) as source_file:
+        source = source_file.convert("RGBA")
+    raw = pipeline._connected_components(source)
+    candidates = [
+        component
+        for component in raw
+        if pipeline._is_character_candidate(component, source.size, 8, 8)
+    ]
+    rows = pipeline._cluster_rows(candidates, 8)
+    print("AUTHORED RUN SHEET DIAGNOSTICS")
+    for row_index, row in enumerate(rows):
+        ordered = sorted(row, key=lambda component: component.center_x)
+        centers = [round(component.center_x, 1) for component in ordered]
+        sizes = [(component.width, component.height, component.pixels) for component in ordered]
+        tops = [component.bbox[1] for component in ordered]
+        bottoms = [component.bbox[3] for component in ordered]
+        print(
+            f"row={row_index} count={len(ordered)} "
+            f"centers={centers} sizes={sizes} "
+            f"median_top={median(tops):.1f} median_bottom={median(bottoms):.1f}"
+        )
 
 
 def _authored_run_adapter(pipeline, source_path, directions: Sequence[str], canvas_size, ground_y: int):
@@ -75,6 +94,7 @@ def _authored_run_adapter(pipeline, source_path, directions: Sequence[str], canv
 def main() -> None:
     builder = _load_module(BUILDER_PATH, "backyard_hero_builder")
     pipeline = _load_module(PIPELINE_PATH, "backyard_authored_run_pipeline")
+    _print_sheet_diagnostics(pipeline, builder.MOVE_SRC)
 
     def build_authored_run_frames(source_path, directions=builder.DIRECTIONS, canvas_size=builder.CANVAS, ground_y=builder.ANCHOR[1]):
         return _authored_run_adapter(
@@ -85,8 +105,6 @@ def main() -> None:
             ground_y=ground_y,
         )
 
-    # Replace only the known-bad legacy RUN detector. All other production builder behavior
-    # remains unchanged so the candidate can be compared safely against the current project.
     builder.build_authored_run_frames = build_authored_run_frames
 
     movement = builder.movement_frames()
