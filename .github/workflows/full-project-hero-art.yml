@@ -10,12 +10,16 @@ on:
       - tools/art/hero_authored_run_resilient.py
       - tools/art/hero_authored_run_recovery.py
       - tools/art/hero_authored_run_recovery_v2.py
+      - tools/art/hero_authored_fire_pipeline.py
       - tools/art/build_full_project_hero_candidate.py
       - tests/python/test_authored_run_extraction_geometry.py
       - tests/python/test_hero_authored_run_pipeline.py
       - tests/python/test_build_new_reference_hero_authored_run.py
       - tests/python/test_hero_authored_run_run_only_layout.py
       - tests/python/test_hero_authored_run_projection_recovery.py
+      - tests/python/test_hero_authored_fire_pipeline.py
+      - tests/python/test_build_new_reference_hero_authored_fire.py
+      - tests/python/test_full_project_hero_candidate_fire.py
       - tests/python/test_full_project_hero_candidate_safety.py
       - scripts/art/hero_run_sheet_analyzer.gd
       - tests/test_hero_run_sheet_analyzer.gd
@@ -35,7 +39,7 @@ jobs:
       - name: Install art pipeline packages
         run: python3 -m pip install --quiet pillow numpy gdown
 
-      - name: Run authored RUN pipeline unit tests
+      - name: Run authored hero art pipeline unit tests
         run: python3 -m unittest discover -s tests/python -p 'test_*.py'
 
       - name: Download canonical full project from Google Drive
@@ -62,6 +66,7 @@ jobs:
           cp tools/art/hero_authored_run_resilient.py "$FULL_ROOT/tools/art/hero_authored_run_resilient.py"
           cp tools/art/hero_authored_run_recovery.py "$FULL_ROOT/tools/art/hero_authored_run_recovery.py"
           cp tools/art/hero_authored_run_recovery_v2.py "$FULL_ROOT/tools/art/hero_authored_run_recovery_v2.py"
+          cp tools/art/hero_authored_fire_pipeline.py "$FULL_ROOT/tools/art/hero_authored_fire_pipeline.py"
           cp tools/art/build_full_project_hero_candidate.py "$FULL_ROOT/tools/art/build_full_project_hero_candidate.py"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_new_8dir_movement_sheet.png"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_clean_8dir_reference.png"
@@ -75,8 +80,10 @@ jobs:
           python3 tools/art/build_full_project_hero_candidate.py \
             --candidate-dir artifacts/hero_candidate | tee /tmp/hero-stage.log
           grep -q "run frames each: 8" /tmp/hero-stage.log
+          grep -q "fire frames each: 4" /tmp/hero-stage.log
           grep -q "Runtime unchanged" /tmp/hero-stage.log
           test -s artifacts/hero_candidate/authored-run-contact-sheet.png
+          test -s artifacts/hero_candidate/authored-fire-contact-sheet.png
 
       - name: Verify staged authored RUN output
         shell: bash
@@ -141,6 +148,68 @@ jobs:
           print('Verified staged authored RUN:', 8, 'directions x', 8, 'frames')
           PY
 
+      - name: Verify staged authored FIRE output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw
+          import hashlib
+          import os
+
+          root = Path(os.environ['FULL_ROOT'])
+          out = root / 'artifacts/hero_candidate/frames'
+          directions = ['front','front_right','right','back_right','back','back_left','left','front_left']
+          frames_by_dir = {}
+          errors = []
+
+          for direction in directions:
+              frames = []
+              authored_hashes = set()
+              for index in range(4):
+                  path = out / f'fire_{direction}_{index:02d}.png'
+                  if not path.exists():
+                      errors.append(f'missing {path.name}')
+                      continue
+                  image = Image.open(path).convert('RGBA')
+                  if image.size != (320, 320):
+                      errors.append(f'{path.name}: expected 320x320, got {image.size}')
+                  alpha = image.getchannel('A')
+                  bbox = alpha.point(lambda p: 255 if p > 16 else 0).getbbox()
+                  if bbox is None:
+                      errors.append(f'{path.name}: empty alpha')
+                      continue
+                  left, top, right, bottom = bbox
+                  if top < 8 or bottom > 312 or left < 8 or right > 312:
+                      errors.append(f'{path.name}: unsafe FIRE margin {bbox}')
+                  if index < 3:
+                      authored_hashes.add(hashlib.sha256(image.tobytes()).hexdigest())
+                  frames.append(image)
+              if len(authored_hashes) != 3:
+                  errors.append(f'{direction}: expected 3 unique authored FIRE poses, got {len(authored_hashes)}')
+              frames_by_dir[direction] = frames
+
+          if errors:
+              raise SystemExit('\n'.join(errors))
+
+          tile = 160
+          label_w = 150
+          sheet = Image.new('RGBA', (label_w + tile * 4, tile * 8), (28, 30, 32, 255))
+          draw = ImageDraw.Draw(sheet)
+          for row, direction in enumerate(directions):
+              draw.text((10, row * tile + 10), direction, fill=(240, 240, 240, 255))
+              for col, frame in enumerate(frames_by_dir[direction]):
+                  thumb = frame.resize((tile, tile), Image.Resampling.LANCZOS)
+                  sheet.alpha_composite(thumb, (label_w + col * tile, row * tile))
+                  label = 'REC' if col == 3 else f'F{col + 1}'
+                  draw.text((label_w + col * tile + 6, row * tile + 6), label, fill=(245, 245, 245, 255))
+          artifact_dir = Path('artifacts')
+          artifact_dir.mkdir(exist_ok=True)
+          sheet.save(artifact_dir / 'hero-authored-fire-contact-sheet.png')
+          print('Verified staged authored FIRE:', 8, 'directions x 4 frames (3 authored + recovery)')
+          PY
+
       - name: Apply validated candidate inside disposable full-project workspace
         shell: bash
         run: |
@@ -151,6 +220,7 @@ jobs:
           grep -q "APPLIED validated hero candidate" /tmp/hero-apply.log
           test -s assets/runtime/characters/builder_hero/builder_hero_frames.tres
           test -s assets/runtime/characters/builder_hero/run_front_00.png
+          test -s assets/runtime/characters/builder_hero/fire_front_00.png
 
       - name: Download Godot 4.7.2 for full candidate gate
         shell: bash
@@ -203,22 +273,24 @@ jobs:
           set -euo pipefail
           cd "$FULL_ROOT"
           rm -rf .godot
-          zip -qr /tmp/BackyardMayhem_HERO_RUN_CANDIDATE.zip . -x 'backups/*' '*.tmp'
-          sha256sum /tmp/BackyardMayhem_HERO_RUN_CANDIDATE.zip | tee /tmp/candidate.sha256
+          zip -qr /tmp/BackyardMayhem_HERO_RUN_FIRE_CANDIDATE.zip . -x 'backups/*' '*.tmp'
+          sha256sum /tmp/BackyardMayhem_HERO_RUN_FIRE_CANDIDATE.zip | tee /tmp/candidate.sha256
 
-      - name: Upload hero run preview
+      - name: Upload hero authored previews
         uses: actions/upload-artifact@v4
         with:
-          name: hero-authored-run-preview
-          path: artifacts/hero-authored-run-contact-sheet.png
+          name: hero-authored-run-fire-preview
+          path: |
+            artifacts/hero-authored-run-contact-sheet.png
+            artifacts/hero-authored-fire-contact-sheet.png
           if-no-files-found: error
 
       - name: Upload full project candidate
         uses: actions/upload-artifact@v4
         with:
-          name: backyard-full-hero-run-candidate
+          name: backyard-full-hero-run-fire-candidate
           path: |
-            /tmp/BackyardMayhem_HERO_RUN_CANDIDATE.zip
+            /tmp/BackyardMayhem_HERO_RUN_FIRE_CANDIDATE.zip
             /tmp/candidate.sha256
           if-no-files-found: error
           compression-level: 0
