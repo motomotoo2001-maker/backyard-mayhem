@@ -26,6 +26,33 @@ static func build_effect_node(effect_name: StringName, direction: Vector2, effec
 
     return root
 
+func spawn_effect(
+    effect_name: StringName,
+    local_origin: Vector2,
+    direction: Vector2,
+    effect_scale: float = 1.0,
+    lifetime: float = 0.1
+) -> Node2D:
+    var effect := build_effect_node(effect_name, direction, effect_scale)
+    if effect == null:
+        return null
+
+    var safe_lifetime := maxf(lifetime, 0.01)
+    effect.position = local_origin
+    effect.set_meta("effect_lifetime", safe_lifetime)
+    add_child(effect)
+
+    if is_inside_tree():
+        var target_scale := effect.scale * 1.18
+        var tween := effect.create_tween()
+        tween.set_parallel(true)
+        tween.tween_property(effect, "modulate:a", 0.0, safe_lifetime)
+        tween.tween_property(effect, "scale", target_scale, safe_lifetime)
+        tween.set_parallel(false)
+        tween.tween_callback(effect.queue_free)
+
+    return effect
+
 static func _build_muzzle_flash(root: Node2D) -> void:
     var outer := Polygon2D.new()
     outer.name = "OuterFlash"
