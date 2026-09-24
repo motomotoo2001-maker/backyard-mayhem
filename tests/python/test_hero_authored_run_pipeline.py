@@ -43,7 +43,6 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
         row_tops = [18, 132, 260, 374, 510, 624, 770, 906]
         cell_width = width // 8
 
-        # Pale column grid models the real reference matte/grid behavior.
         for x in range(cell_width, width, cell_width):
             draw.line((x, 0, x, height), fill=(225, 225, 225, 255), width=1)
 
@@ -75,40 +74,37 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                     (right + 3, upper + 20, right + 8, upper + 35),
                     fill=body_color,
                 )
-
-                # A unique sentinel makes source-label leakage testable without
-                # confusing legitimate black/gray character pixels or resize fringe.
                 draw.text(
                     (cx - 15, bottom + 7),
                     f"RUN{col + 1}",
                     fill=self.LABEL_SENTINEL,
                 )
 
-            # This intentionally foreground-colored guide is geometry noise, not matte.
-            # The extractor must reject it because it is a long 1px component.
             draw.line(
                 (0, top + 104, width, top + 104),
                 fill=self.GUIDE_SENTINEL,
                 width=1,
             )
 
-        # Detached contamination from the next band, where equal-row slicing would
-        # accidentally include it in the previous row.
         draw.rectangle((350, 245, 359, 270), fill=self.LABEL_SENTINEL)
         image.save(path)
         return row_tops
 
-    def _contains_label_sentinel(self, pixels) -> bool:
-        return any(
-            a > 12 and r > g + 70 and b > g + 70
-            for r, g, b, a in pixels
-        )
+    def _label_sentinel_hits(self, frame: Image.Image):
+        hits = []
+        pixels = list(_pixel_data(frame))
+        for index, (r, g, b, a) in enumerate(pixels):
+            if a > 12 and r > g + 70 and b > g + 70:
+                hits.append((index % frame.width, index // frame.width, (r, g, b, a)))
+        return hits
 
-    def _contains_guide_sentinel(self, pixels) -> bool:
-        return any(
-            a > 12 and g > r + 70 and g > b + 70
-            for r, g, b, a in pixels
-        )
+    def _guide_sentinel_hits(self, frame: Image.Image):
+        hits = []
+        pixels = list(_pixel_data(frame))
+        for index, (r, g, b, a) in enumerate(pixels):
+            if a > 12 and g > r + 70 and g > b + 70:
+                hits.append((index % frame.width, index // frame.width, (r, g, b, a)))
+        return hits
 
     def test_detects_eight_irregular_character_bands_and_ignores_labels(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -170,15 +166,17 @@ class HeroAuthoredRunPipelineTest(unittest.TestCase):
                 center_x = (bbox[0] + bbox[2]) / 2.0
                 self.assertLessEqual(abs(center_x - 160.0), 5.0)
 
-                pixels = [px for px in _pixel_data(frame) if px[3] > 0]
-                self.assertTrue(pixels)
+                label_hits = self._label_sentinel_hits(frame)
+                guide_hits = self._guide_sentinel_hits(frame)
                 self.assertFalse(
-                    self._contains_label_sentinel(pixels),
-                    f"{frame_path.name} contains RUN-label/neighbor contamination",
+                    label_hits,
+                    f"{frame_path.name} contains RUN-label/neighbor contamination: "
+                    f"count={len(label_hits)} samples={label_hits[:12]}",
                 )
                 self.assertFalse(
-                    self._contains_guide_sentinel(pixels),
-                    f"{frame_path.name} contains guide-line contamination",
+                    guide_hits,
+                    f"{frame_path.name} contains guide-line contamination: "
+                    f"count={len(guide_hits)} samples={guide_hits[:12]}",
                 )
 
 
