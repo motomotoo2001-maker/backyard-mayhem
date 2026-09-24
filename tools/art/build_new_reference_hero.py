@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.art.hero_authored_run_resilient import build_authored_run_frames
+from tools.art.hero_authored_fire_pipeline import build_authored_fire_frames
 
 MOVE_SRC = ROOT / 'assets/source/user_pack/hero_new_8dir_movement_sheet.png'
 CLEAN_SRC = ROOT / 'assets/source/user_pack/hero_clean_8dir_reference.png'
@@ -202,15 +203,31 @@ def action_frames(movement):
     W, H = im.size
     result = {}
     colw = W / 8.0
-    fire_rows = [(72, 220), (220, 375), (375, 530)]
-    for c, direction in enumerate(DIRECTIONS):
-        frames = []
-        for y0, y1 in fire_rows:
-            box = (c * colw, y0, (c + 1) * colw, y1)
-            crop, main = extract_cell(im, box, True)
-            frames.append(normalize_to_canvas(crop, main))
-        frames.append(movement[(direction, 'idle')][0].copy())
-        result[(direction, 'fire')] = frames
+
+    # FIRE now uses the dedicated authored extractor. The first three frames are
+    # real poses from the action sheet; the fourth frame is the direction's idle
+    # pose and acts as a short recovery frame before locomotion resumes.
+    fire_rows = ((72, 220), (220, 375), (375, 530))
+    with tempfile.TemporaryDirectory(prefix='backyard-hero-authored-fire-') as temp_dir:
+        stage = Path(temp_dir)
+        build_authored_fire_frames(
+            ACTION_SRC,
+            stage,
+            directions=DIRECTIONS,
+            row_bands=fire_rows,
+            canvas_size=CANVAS[0],
+            ground_y=ANCHOR[1],
+        )
+        for direction in DIRECTIONS:
+            frames = []
+            for index in range(3):
+                frame_path = stage / f'fire_{direction}_{index:02d}.png'
+                if not frame_path.is_file():
+                    raise RuntimeError(f'missing authored FIRE frame: {frame_path.name}')
+                with Image.open(frame_path) as frame_file:
+                    frames.append(frame_file.convert('RGBA').copy())
+            frames.append(movement[(direction, 'idle')][0].copy())
+            result[(direction, 'fire')] = frames
 
     build = []
     for c in range(8):
