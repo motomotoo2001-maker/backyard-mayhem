@@ -3,6 +3,7 @@ extends CharacterBody2D
 
 const HeroDirectionResolver = preload("res://scripts/art/hero_direction_resolver.gd")
 const VisualFeedbackOrchestrator = preload("res://scripts/art/visual_feedback_orchestrator.gd")
+const PlayerVisualRig = preload("res://scripts/player/player_visual_rig.gd")
 
 const ACTION_ANIMATION_PRIORITIES := {
     &"idle": 0,
@@ -14,9 +15,6 @@ const ACTION_ANIMATION_PRIORITIES := {
     &"death": 50,
     &"defeat": 50,
 }
-const WEAPON_RECOIL_PX := 6.0
-const DASH_TRAIL_PEAK_SCALE := 1.2
-const HURT_FLASH_COLOR := Color(1.28, 0.68, 0.68, 1.0)
 
 signal incapacitated
 signal revived
@@ -162,29 +160,10 @@ func _frame_vfx_events(animation_name: StringName, frame: int) -> Array[StringNa
     return VisualFeedbackOrchestrator.hero_frame_events(action, frame)
 
 func _builtin_feedback_for_event(event_name: StringName, action: StringName) -> Dictionary:
-    if event_name == &"recoil_peak" and action == &"fire":
-        return {"weapon_recoil_px": WEAPON_RECOIL_PX}
-    if event_name == &"recovery" and action == &"fire":
-        return {"reset_weapon": true}
-    if event_name == &"trail_peak" and action == &"dash":
-        return {"dash_trail_scale": DASH_TRAIL_PEAK_SCALE}
-    if event_name == &"trail_end" and action == &"dash":
-        return {"reset_dash_trail": true}
-    if event_name == &"impact" and action == &"hurt":
-        return {"hurt_flash": true}
-    if event_name == &"recovery" and action == &"hurt":
-        return {"clear_hurt_flash": true}
-    return {}
+    return PlayerVisualRig.response_for_event(event_name, action)
 
 func _feedback_cleanup_for_action(action: StringName) -> Dictionary:
-    match action:
-        &"fire":
-            return {"reset_weapon": true}
-        &"dash":
-            return {"reset_dash_trail": true}
-        &"hurt":
-            return {"clear_hurt_flash": true}
-    return {}
+    return PlayerVisualRig.cleanup_for_action(action)
 
 func _on_animation_changed() -> void:
     _dispatch_current_frame_vfx_events()
@@ -233,7 +212,7 @@ func _apply_feedback_response(response: Dictionary) -> void:
         dash_fx.scale = _dash_fx_rest_scale
 
     if bool(response.get("hurt_flash", false)) and animated_sprite != null:
-        animated_sprite.modulate = HURT_FLASH_COLOR
+        animated_sprite.modulate = response.get("hurt_flash_color", Color(1.28, 0.68, 0.68, 1.0)) as Color
 
     if bool(response.get("clear_hurt_flash", false)) and animated_sprite != null:
         animated_sprite.modulate = Color.WHITE
