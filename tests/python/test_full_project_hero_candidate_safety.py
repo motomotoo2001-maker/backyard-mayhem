@@ -29,6 +29,16 @@ def _write_frame(path: Path, box, color=(140, 90, 180, 255), marker_x=0):
     image.save(path)
 
 
+def _write_valid_fire_sequence(frames_dir: Path, direction: str):
+    names = []
+    for index in range(4):
+        name = f"fire_{direction}_{index:02d}.png"
+        names.append(name)
+        color = (110 + index * 20, 70 + index * 25, 160, 255)
+        _write_frame(frames_dir / name, (24, 24, 295, 305), color=color, marker_x=index * 3)
+    return names
+
+
 class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
     def setUp(self):
         self.source = SCRIPT.read_text(encoding="utf-8")
@@ -75,7 +85,7 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
                     "full-project candidate must not monkeypatch the production authored RUN extractor",
                 )
 
-    def test_legacy_action_edge_touch_does_not_block_authored_run_candidate(self):
+    def test_legacy_action_edge_touch_does_not_block_authored_run_fire_candidate(self):
         module = _load_candidate_module()
         with tempfile.TemporaryDirectory() as temp_dir:
             frames_dir = Path(temp_dir)
@@ -85,13 +95,16 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
                 run_names.append(name)
                 _write_frame(frames_dir / name, (20, 20, 299, 299), marker_x=index * 2)
 
-            # Legacy action art can still touch a side edge. That is separate visual debt
-            # and must not prevent us from reviewing/replacing the authored RUN sequence.
-            _write_frame(frames_dir / "fire_back_00.png", (53, 90, 319, 305))
+            fire_names = _write_valid_fire_sequence(frames_dir, "front")
+
+            # BUILD/HURT/DEFEAT are still legacy visual debt and may touch an edge.
+            # That must not block already-promoted authored RUN/FIRE candidates.
+            _write_frame(frames_dir / "build_00.png", (53, 90, 319, 305))
             (frames_dir / "builder_hero_frames.tres").write_text("[gd_resource type=\"SpriteFrames\"]\n", encoding="utf-8")
             generated = {
                 ("run", "front"): run_names,
-                ("fire", "back"): ["fire_back_00.png"],
+                ("fire", "front"): fire_names,
+                ("build", "generic"): ["build_00.png"],
             }
 
             module._validate_candidate_frames(frames_dir, generated, ["front"], (320, 320), 306)
@@ -106,8 +119,12 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
                 run_names.append(name)
                 box = (0, 20, 299, 299) if index == 0 else (20, 20, 299, 299)
                 _write_frame(frames_dir / name, box, marker_x=index * 2)
+            fire_names = _write_valid_fire_sequence(frames_dir, "front")
             (frames_dir / "builder_hero_frames.tres").write_text("[gd_resource type=\"SpriteFrames\"]\n", encoding="utf-8")
-            generated = {("run", "front"): run_names}
+            generated = {
+                ("run", "front"): run_names,
+                ("fire", "front"): fire_names,
+            }
 
             with self.assertRaises(RuntimeError):
                 module._validate_candidate_frames(frames_dir, generated, ["front"], (320, 320), 306)
