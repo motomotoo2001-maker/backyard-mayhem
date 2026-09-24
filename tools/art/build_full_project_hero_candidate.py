@@ -53,11 +53,12 @@ def _print_sheet_diagnostics(pipeline, source_path: Path) -> None:
 
 def _load_frames_from_paths(paths, directions: Sequence[str]):
     result = {direction: [] for direction in directions}
+    match_order = sorted(directions, key=len, reverse=True)
     for frame_path in paths:
         stem = Path(frame_path).stem
         matched_direction = None
         matched_index = None
-        for direction in directions:
+        for direction in match_order:
             prefix = f"run_{direction}_"
             if stem.startswith(prefix):
                 matched_direction = direction
