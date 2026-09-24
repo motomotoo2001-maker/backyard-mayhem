@@ -59,12 +59,12 @@ class ProductionHeroBuildAuthoredRunTest(unittest.TestCase):
         ]
         self.assertFalse(procedural_calls, "movement_frames must use authored frames, not procedural transforms")
 
-    def test_production_builder_uses_shared_extractor_instead_of_duplicate_detector(self):
+    def test_production_builder_uses_resilient_shared_extractor_instead_of_duplicate_detector(self):
         shared_import = False
         for node in self.tree.body:
             if not isinstance(node, ast.ImportFrom):
                 continue
-            if node.module != "tools.art.hero_authored_run_pipeline":
+            if node.module != "tools.art.hero_authored_run_resilient":
                 continue
             if any(alias.name == "build_authored_run_frames" for alias in node.names):
                 shared_import = True
@@ -72,7 +72,7 @@ class ProductionHeroBuildAuthoredRunTest(unittest.TestCase):
 
         self.assertTrue(
             shared_import,
-            "production builder must import the tested shared authored RUN extractor",
+            "production builder must import the resilient shared authored RUN extractor",
         )
 
         function_names = {
