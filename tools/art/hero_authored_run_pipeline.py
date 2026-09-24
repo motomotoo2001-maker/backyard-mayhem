@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 from pathlib import Path
+from statistics import median
 from typing import NamedTuple, Sequence
 
 from PIL import Image, ImageDraw
@@ -200,14 +201,58 @@ def _select_character_slots(
             f"(IDLE + RUN frames), found {len(row_components)}"
         )
 
-    # Small detached weapons/accessories may also qualify as candidates. The main
-    # body silhouettes are consistently the largest filled components in each row.
-    strongest = sorted(
-        row_components,
-        key=lambda component: (component.pixels, component.height, component.width),
-        reverse=True,
-    )[:expected_slots]
-    slots = sorted(strongest, key=lambda component: component.center_x)
+    if len(row_components) == expected_slots:
+        slots = sorted(row_components, key=lambda component: component.center_x)
+    else:
+        # Extra components are normally detached props/UI fragments. Cluster by X,
+        # then select the component that best matches the row's normal vertical
+        # center/height instead of blindly taking the largest filled shapes.
+        ordered = sorted(row_components, key=lambda component: component.center_x)
+        count = len(ordered)
+        centers = [
+            ordered[min(count - 1, int((slot + 0.5) * count / expected_slots))].center_x
+            for slot in range(expected_slots)
+        ]
+        groups: list[list[Component]] = []
+        for _iteration in range(24):
+            groups = [[] for _ in range(expected_slots)]
+            for component in ordered:
+                nearest = min(
+                    range(expected_slots),
+                    key=lambda index: abs(component.center_x - centers[index]),
+                )
+                groups[nearest].append(component)
+            if any(not group for group in groups):
+                break
+            updated = [float(median([component.center_x for component in group])) for group in groups]
+            if max(abs(a - b) for a, b in zip(centers, updated)) < 0.05:
+                centers = updated
+                break
+            centers = updated
+
+        if any(not group for group in groups):
+            strongest = sorted(
+                row_components,
+                key=lambda component: (component.pixels, component.height, component.width),
+                reverse=True,
+            )[:expected_slots]
+            slots = sorted(strongest, key=lambda component: component.center_x)
+        else:
+            row_center = float(median([component.center_y for component in row_components]))
+            row_height = float(median([component.height for component in row_components]))
+            slots = []
+            for group in groups:
+                slots.append(
+                    min(
+                        group,
+                        key=lambda component: (
+                            abs(component.center_y - row_center) * 2.0
+                            + abs(component.height - row_height) * 0.5
+                            - component.pixels * 0.0005
+                        ),
+                    )
+                )
+            slots.sort(key=lambda component: component.center_x)
 
     for previous, current in zip(slots, slots[1:]):
         if current.center_x <= previous.center_x:
@@ -252,9 +297,6 @@ def _merge_related_bbox(
         if not (expanded_left <= component.center_x <= expanded_right):
             continue
 
-        # Detached authored accessories may be merged only when they share a
-        # meaningful vertical span with the body. A few touching pixels are not
-        # enough: this prevents IDLE/RUN labels and adjacent-row fragments leaking in.
         overlap = _vertical_overlap(primary, component)
         required_overlap = max(3, int(min(primary.height, component.height) * 0.30))
         if overlap < required_overlap:
@@ -273,6 +315,52 @@ def _merge_related_bbox(
     )
 
 
+def _first_core_foreground_y(
+    image: Image.Image,
+    bbox: tuple[int, int, int, int],
+    center_x: float,
+) -> int | None:
+    """Find the first body row near the slot center, ignoring off-axis spikes."""
+
+    left, top, right, bottom = bbox
+    half_width = max(2, int((right - left) * 0.20))
+    core_left = max(left, int(round(center_x)) - half_width)
+    core_right = min(right, int(round(center_x)) + half_width + 1)
+    pixels = image.load()
+
+    for y in range(max(0, top), min(image.height, bottom)):
+        hits = 0
+        for x in range(max(0, core_left), min(image.width, core_right)):
+            if not _is_background(pixels[x, y]):
+                hits += 1
+                if hits >= 2:
+                    return y
+    return None
+
+
+def _tighten_outlier_top(
+    image: Image.Image,
+    bbox: tuple[int, int, int, int],
+    primary: Component,
+    median_top: float,
+    median_height: float,
+) -> tuple[int, int, int, int]:
+    """Trim only an anomalously tall attached fragment above a normal body row."""
+
+    left, top, right, bottom = bbox
+    tolerance = max(6, int(round(median_height * 0.14)))
+    if top >= median_top - tolerance:
+        return bbox
+
+    core_top = _first_core_foreground_y(image, bbox, primary.center_x)
+    if core_top is None:
+        return bbox
+    tightened_top = max(top, core_top)
+    if tightened_top >= bottom:
+        return bbox
+    return (left, tightened_top, right, bottom)
+
+
 def detect_authored_run_cells(
     image: Image.Image,
     rows: int = 8,
@@ -289,7 +377,7 @@ def detect_authored_run_cells(
     ]
     row_groups = _cluster_rows(candidates, rows)
 
-    expected_character_slots = columns + 1  # IDLE + RUN1..RUN8
+    expected_character_slots = columns + 1
     cells: list[RunCell] = []
 
     for row_index, row_components in enumerate(row_groups):
@@ -297,21 +385,21 @@ def detect_authored_run_cells(
         idle_slot = slots[0]
         run_slots = slots[1:]
 
-        row_center = sum(component.center_y for component in slots) / len(slots)
-        row_height = max(component.height for component in slots)
+        row_center = float(median([component.center_y for component in slots]))
+        row_height = float(median([component.height for component in slots]))
+        median_top = float(median([component.bbox[1] for component in slots]))
         row_all = [
             component
             for component in raw_components
-            if abs(component.center_y - row_center) <= row_height * 0.80
+            if abs(component.center_y - row_center) <= row_height * 0.85
         ]
 
         for run_index, primary in enumerate(run_slots):
             slot_index = run_index + 1
             left, right = _slot_bounds(slots, slot_index, rgba.width)
             bbox = _merge_related_bbox(primary, row_all, left, right)
+            bbox = _tighten_outlier_top(rgba, bbox, primary, median_top, row_height)
 
-            # A RUN bbox must remain to the right of the IDLE body's center. This is
-            # a cheap invariant that catches accidental remapping back onto IDLE.
             if (bbox[0] + bbox[2]) * 0.5 <= idle_slot.center_x:
                 raise ValueError(f"Row {row_index} RUN{run_index + 1} mapped onto IDLE")
             cells.append(RunCell(row_index, run_index, bbox))
@@ -319,6 +407,68 @@ def detect_authored_run_cells(
     if len(cells) != rows * columns:
         raise ValueError(f"Expected {rows * columns} run cells, detected {len(cells)}")
     return cells
+
+
+def _row_segments(image: Image.Image, y: int) -> list[tuple[int, int]]:
+    segments: list[tuple[int, int]] = []
+    start: int | None = None
+    pixels = image.load()
+    for x in range(image.width):
+        foreground = pixels[x, y][3] > 8
+        if foreground and start is None:
+            start = x
+        elif not foreground and start is not None:
+            segments.append((start, x))
+            start = None
+    if start is not None:
+        segments.append((start, image.width))
+    return segments
+
+
+def _nearest_segment(segments: Sequence[tuple[int, int]], center_x: float) -> tuple[int, int] | None:
+    if not segments:
+        return None
+    return min(segments, key=lambda segment: abs(((segment[0] + segment[1]) * 0.5) - center_x))
+
+
+def _remove_leading_spikes(crop: Image.Image) -> Image.Image:
+    """Remove a short off-axis fragment attached above the main body by a tiny bridge.
+
+    This is deliberately limited to the first few foreground rows. Long authored
+    weapon/robe/leg geometry lower in the frame is never filtered.
+    """
+
+    alpha_bbox = crop.getchannel("A").getbbox()
+    if alpha_bbox is None:
+        return crop
+
+    left, top, right, bottom = alpha_bbox
+    center_x = (left + right) * 0.5
+    sample_start = min(bottom - 1, top + 6)
+    sample_end = min(bottom, top + max(14, int((bottom - top) * 0.35)))
+    sample_segments: list[tuple[int, int]] = []
+    for y in range(sample_start, sample_end):
+        segment = _nearest_segment(_row_segments(crop, y), center_x)
+        if segment is not None:
+            sample_segments.append(segment)
+
+    if not sample_segments:
+        return crop
+
+    stable_left = int(round(median([segment[0] for segment in sample_segments])))
+    stable_right = int(round(median([segment[1] for segment in sample_segments])))
+    margin = max(2, int((right - left) * 0.05))
+    keep_left = max(0, stable_left - margin)
+    keep_right = min(crop.width, stable_right + margin)
+
+    pixels = crop.load()
+    for y in range(top, min(bottom, sample_start + 1)):
+        for x in range(crop.width):
+            if x < keep_left or x >= keep_right:
+                r, g, b, a = pixels[x, y]
+                if a > 8:
+                    pixels[x, y] = (0, 0, 0, 0)
+    return crop
 
 
 def _transparent_crop(
@@ -338,10 +488,9 @@ def _transparent_crop(
 
     cleaned: list[tuple[int, int, int, int]] = []
     for pixel in _pixel_data(crop):
-        # Zero RGB as well as alpha. Keeping white matte RGB under alpha=0 causes
-        # Lanczos to bleed pale/gray fringe pixels back into resized runtime art.
         cleaned.append((0, 0, 0, 0) if _is_background(pixel) else pixel)
     crop.putdata(cleaned)
+    crop = _remove_leading_spikes(crop)
 
     alpha_bbox = crop.getchannel("A").getbbox()
     if alpha_bbox is None:
