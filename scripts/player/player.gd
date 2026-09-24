@@ -3,6 +3,17 @@ extends CharacterBody2D
 
 const HeroDirectionResolver = preload("res://scripts/art/hero_direction_resolver.gd")
 
+const ACTION_ANIMATION_PRIORITIES := {
+    &"idle": 0,
+    &"run": 0,
+    &"fire": 10,
+    &"build": 20,
+    &"dash": 30,
+    &"hurt": 40,
+    &"death": 50,
+    &"defeat": 50,
+}
+
 signal incapacitated
 signal revived
 
@@ -104,12 +115,32 @@ func _update_animation(input_direction: Vector2) -> void:
     var sprite: AnimatedSprite2D = animated_sprite if animated_sprite != null else get_node_or_null("VisualRoot/AnimatedSprite2D") as AnimatedSprite2D
     if sprite == null or sprite.sprite_frames == null:
         return
-    if _action_animation != &"" and sprite.animation == _action_animation and sprite.is_playing():
-        return
+
     var desired_state := _select_animation_state(input_direction)
+    if _action_animation != &"" and sprite.animation == _action_animation and sprite.is_playing():
+        if _should_hold_action_animation(desired_state):
+            return
+        _action_animation = &""
+
     var desired := _resolve_animation_name(desired_state, input_direction)
     if sprite.animation != desired or not sprite.is_playing():
         sprite.play(desired)
+
+func _should_hold_action_animation(incoming_state: StringName) -> bool:
+    if _action_animation == &"":
+        return false
+    var current_state := _animation_base_state(_action_animation)
+    return _action_priority(current_state) >= _action_priority(incoming_state)
+
+func _animation_base_state(animation_name: StringName) -> StringName:
+    var text := String(animation_name)
+    var separator := text.find("_")
+    if separator < 0:
+        return animation_name
+    return StringName(text.substr(0, separator))
+
+func _action_priority(state: StringName) -> int:
+    return int(ACTION_ANIMATION_PRIORITIES.get(state, 0))
 
 func _select_animation_state(input_direction: Vector2) -> StringName:
     if dash_component != null and is_instance_valid(dash_component) and dash_component.has_method("is_active"):
