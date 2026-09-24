@@ -22,15 +22,69 @@ def _load_base():
     return module
 
 
+def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    alpha = rgba.getchannel("A")
+    bbox = alpha.point(lambda value: 255 if value > 16 else 0).getbbox()
+    if bbox is None:
+        return rgba
+    left, top, right, bottom = bbox
+    height = bottom - top
+    if height < 20:
+        return rgba
+
+    pixels = alpha.load()
+    row_counts = []
+    for y in range(top, bottom):
+        count = 0
+        for x in range(left, right):
+            if pixels[x, y] > 16:
+                count += 1
+        row_counts.append(count)
+    maximum = max(row_counts) if row_counts else 0
+    if maximum <= 0:
+        return rgba
+
+    narrow_threshold = max(3, int(maximum * 0.12))
+    search_start = max(1, int(height * 0.52))
+    candidate_cut = None
+    index = search_start
+    while index < height - 2:
+        if row_counts[index] > narrow_threshold:
+            index += 1
+            continue
+        start = index
+        while index < height and row_counts[index] <= narrow_threshold:
+            index += 1
+        end = index
+        if end - start < 2 or end >= height:
+            continue
+        above_mass = sum(row_counts[:start])
+        below_mass = sum(row_counts[end:])
+        below_peak = max(row_counts[end:], default=0)
+        if above_mass > 0 and 0 < below_mass <= above_mass * 0.35 and below_peak >= narrow_threshold * 2:
+            candidate_cut = start
+            break
+
+    if candidate_cut is None:
+        return rgba
+
+    cut_y = top + candidate_cut
+    cleaned = rgba.copy()
+    cleaned_pixels = cleaned.load()
+    for y in range(cut_y, bottom):
+        for x in range(left, right):
+            cleaned_pixels[x, y] = (0, 0, 0, 0)
+    return cleaned
+
+
 def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
     with Image.open(path) as source:
-        image = source.convert("RGBA")
+        image = _strip_connected_lower_chrome(source.convert("RGBA"))
     bbox = image.getchannel("A").point(lambda value: 255 if value > 16 else 0).getbbox()
     if bbox is None:
         raise ValueError(f"Recovered frame is empty: {path.name}")
     shift_y = ground_y - bbox[3]
-    if shift_y == 0:
-        return
     shifted = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
     shifted.alpha_composite(image, (0, shift_y))
     normalized_bbox = shifted.getchannel("A").point(lambda value: 255 if value > 16 else 0).getbbox()
