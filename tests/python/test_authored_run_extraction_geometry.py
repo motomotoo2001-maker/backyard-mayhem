@@ -7,11 +7,18 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BUILDER_PATH = ROOT / "tools" / "art" / "build_new_reference_hero.py"
+PIPELINE_PATH = ROOT / "tools" / "art" / "hero_authored_run_pipeline.py"
 
-spec = importlib.util.spec_from_file_location("hero_builder", BUILDER_PATH)
-hero_builder = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(hero_builder)
+spec = importlib.util.spec_from_file_location("hero_authored_run_pipeline", PIPELINE_PATH)
+if spec is None or spec.loader is None:
+    raise RuntimeError(f"Cannot load pipeline module from {PIPELINE_PATH}")
+pipeline = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pipeline)
+
+
+def _pixel_data(image: Image.Image):
+    getter = getattr(image, "get_flattened_data", None)
+    return getter() if getter is not None else image.getdata()
 
 
 class AuthoredRunExtractionGeometryTest(unittest.TestCase):
@@ -48,36 +55,42 @@ class AuthoredRunExtractionGeometryTest(unittest.TestCase):
         return row_colors
 
     def test_nonuniform_rows_are_extracted_without_equal_height_slicing_or_labels(self):
-        directions = list(hero_builder.DIRECTIONS)
+        directions = list(pipeline.DEFAULT_DIRECTIONS)
         with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "movement_sheet.png"
+            root = Path(tmp)
+            source = root / "movement_sheet.png"
+            output = root / "runtime"
             row_colors = self._make_nonuniform_sheet(source)
-            result = hero_builder.build_authored_run_frames(
+            built = pipeline.build_authored_run_frames(
                 source,
+                output,
                 directions=directions,
-                canvas_size=(160, 160),
+                canvas_size=160,
                 ground_y=150,
             )
 
-        self.assertEqual(set(directions), set(result.keys()))
-        for row, direction in enumerate(directions):
-            self.assertEqual(8, len(result[direction]))
-            for frame in result[direction]:
-                self.assertEqual((160, 160), frame.size)
-                alpha = frame.getchannel("A")
-                bbox = alpha.getbbox()
-                self.assertIsNotNone(bbox)
-                # Main character is bottom-anchored; labels below it must not survive extraction.
-                self.assertGreaterEqual(bbox[3], 148)
-                self.assertLessEqual(bbox[3], 151)
-                self.assertLess(bbox[2] - bbox[0], 125, "wide RUN label leaked into runtime frame")
+            self.assertEqual(64, len(built))
+            for row, direction in enumerate(directions):
+                for frame_index in range(8):
+                    frame_path = output / f"run_{direction}_{frame_index:02d}.png"
+                    self.assertTrue(frame_path.is_file(), frame_path.name)
+                    with Image.open(frame_path) as frame_file:
+                        frame = frame_file.convert("RGBA")
 
-                pixels = list(frame.getdata())
-                opaque_rgb = [(r, g, b) for r, g, b, a in pixels if a > 220]
-                self.assertTrue(opaque_rgb)
-                mean = tuple(sum(px[i] for px in opaque_rgb) / len(opaque_rgb) for i in range(3))
-                expected = row_colors[row]
-                self.assertLess(sum(abs(mean[i] - expected[i]) for i in range(3)), 55)
+                    self.assertEqual((160, 160), frame.size)
+                    alpha = frame.getchannel("A")
+                    bbox = alpha.getbbox()
+                    self.assertIsNotNone(bbox)
+                    # Main character is bottom-anchored; labels below it must not survive extraction.
+                    self.assertGreaterEqual(bbox[3], 148)
+                    self.assertLessEqual(bbox[3], 151)
+                    self.assertLess(bbox[2] - bbox[0], 125, "wide RUN label leaked into runtime frame")
+
+                    opaque_rgb = [(r, g, b) for r, g, b, a in _pixel_data(frame) if a > 220]
+                    self.assertTrue(opaque_rgb)
+                    mean = tuple(sum(px[i] for px in opaque_rgb) / len(opaque_rgb) for i in range(3))
+                    expected = row_colors[row]
+                    self.assertLess(sum(abs(mean[i] - expected[i]) for i in range(3)), 55)
 
 
 if __name__ == "__main__":
