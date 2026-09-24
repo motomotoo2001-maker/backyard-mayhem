@@ -1,10 +1,32 @@
 import ast
+import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
+
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "art" / "build_full_project_hero_candidate.py"
+
+
+def _load_candidate_module():
+    spec = importlib.util.spec_from_file_location("hero_candidate_builder_test", SCRIPT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {SCRIPT}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_frame(path: Path, box, color=(140, 90, 180, 255), marker_x=0):
+    image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle(box, fill=color)
+    if marker_x:
+        draw.rectangle((100 + marker_x, 120, 104 + marker_x, 124), fill=(255, 210, 40, 255))
+    image.save(path)
 
 
 class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
@@ -38,6 +60,43 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
         self.assertIn("candidate_dir", main_source)
         self.assertIn("if args.apply", main_source)
         self.assertNotIn("builder.OUT = builder.ROOT / 'assets/runtime", main_source)
+
+    def test_legacy_action_edge_touch_does_not_block_authored_run_candidate(self):
+        module = _load_candidate_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            frames_dir = Path(temp_dir)
+            run_names = []
+            for index in range(8):
+                name = f"run_front_{index:02d}.png"
+                run_names.append(name)
+                _write_frame(frames_dir / name, (20, 20, 299, 299), marker_x=index * 2)
+
+            # Legacy action art can still touch a side edge. That is separate visual debt
+            # and must not prevent us from reviewing/replacing the authored RUN sequence.
+            _write_frame(frames_dir / "fire_back_00.png", (53, 90, 319, 305))
+            (frames_dir / "builder_hero_frames.tres").write_text("[gd_resource type=\"SpriteFrames\"]\n", encoding="utf-8")
+            generated = {
+                ("run", "front"): run_names,
+                ("fire", "back"): ["fire_back_00.png"],
+            }
+
+            module._validate_candidate_frames(frames_dir, generated, ["front"], (320, 320), 306)
+
+    def test_authored_run_edge_touch_still_fails_validation(self):
+        module = _load_candidate_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            frames_dir = Path(temp_dir)
+            run_names = []
+            for index in range(8):
+                name = f"run_front_{index:02d}.png"
+                run_names.append(name)
+                box = (0, 20, 299, 299) if index == 0 else (20, 20, 299, 299)
+                _write_frame(frames_dir / name, box, marker_x=index * 2)
+            (frames_dir / "builder_hero_frames.tres").write_text("[gd_resource type=\"SpriteFrames\"]\n", encoding="utf-8")
+            generated = {("run", "front"): run_names}
+
+            with self.assertRaises(RuntimeError):
+                module._validate_candidate_frames(frames_dir, generated, ["front"], (320, 320), 306)
 
 
 if __name__ == "__main__":
