@@ -24,7 +24,7 @@ on:
 jobs:
   build-hero-art:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       DRIVE_FILE_ID: 15ZdOAJaLP216dY8QFPJkp8SON1vJFjgV
     steps:
@@ -149,6 +149,51 @@ jobs:
           grep -q "APPLIED validated hero candidate" /tmp/hero-apply.log
           test -s assets/runtime/characters/builder_hero/builder_hero_frames.tres
           test -s assets/runtime/characters/builder_hero/run_front_00.png
+
+      - name: Download Godot 4.7.2 for full candidate gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.2-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+          echo "GODOT_BIN=/tmp/Godot_v4.7.2-stable_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Full candidate editor parse gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          "$GODOT_BIN" --headless --path . --editor --quit 2>&1 | tee /tmp/full-candidate-editor.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script" /tmp/full-candidate-editor.log; then
+            echo "::error::Full candidate emitted a Godot script/parse error"
+            exit 1
+          fi
+
+      - name: Full candidate hero and gameplay regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          tests=(
+            tests/test_hero_safe_margins.gd
+            tests/test_new_hero_reference_contract.gd
+            tests/test_new_hero_muzzle_alignment.gd
+            tests/test_new_hero_animation_contract.gd
+            tests/test_player_dash.gd
+            tests/test_five_wave_builder_acceptance.gd
+          )
+          for test_path in "${tests[@]}"; do
+            test -f "$test_path"
+            log="/tmp/$(basename "$test_path" .gd).log"
+            echo "=== $test_path ==="
+            timeout 90s "$GODOT_BIN" --headless --path . --script "res://$test_path" 2>&1 | tee "$log"
+            if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script" "$log"; then
+              echo "::error::$test_path emitted a Godot script/parse error"
+              exit 1
+            fi
+          done
 
       - name: Package full candidate project
         shell: bash
