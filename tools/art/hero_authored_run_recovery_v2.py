@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -24,11 +25,17 @@ def _load_base():
 
 
 def _load_cleanup():
-    spec = importlib.util.spec_from_file_location("hero_candidate_cleanup_for_run_recovery", CLEANUP_PATH)
+    module_name = "hero_candidate_cleanup_for_run_recovery"
+    spec = importlib.util.spec_from_file_location(module_name, CLEANUP_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load hero cleanup from {CLEANUP_PATH}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return module
 
 
