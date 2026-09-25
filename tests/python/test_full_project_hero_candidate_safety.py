@@ -129,6 +129,15 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 module._validate_candidate_frames(frames_dir, generated, ["front"], (320, 320), 306)
 
+    def test_full_project_grounding_patch_is_explicit_and_preview_matches_placed_chair(self):
+        self._function("_patch_full_project_grounding")
+        self._function("_chair_visual_offset")
+        self.assertIn("scenes/player/player.tscn", self.source)
+        self.assertIn("scenes/defenses/chair_barricade.tscn", self.source)
+        self.assertIn("scripts/build/build_controller.gd", self.source)
+        module = _load_candidate_module()
+        self.assertEqual(module._chair_visual_offset(), (0.0, -32.0))
+
 
 if __name__ == "__main__":
     unittest.main()
