@@ -104,6 +104,19 @@ class AuthoredRunGroundStabilityTest(unittest.TestCase):
         cleaned_alpha = sum(1 for value in cleaned.getchannel("A").getdata() if value > 16)
         self.assertEqual(original_alpha, cleaned_alpha)
 
+    def test_upper_presentation_cleanup_removes_detached_wide_label(self):
+        module = _load_module()
+        image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((122, 92, 202, 292), radius=12, fill=(133, 84, 176, 255))
+        # Wide shallow label with a real transparent gap above the body.
+        draw.rectangle((100, 58, 224, 72), fill=(240, 230, 215, 255))
+
+        cleaned = module._strip_upper_presentation_band(image)
+
+        self.assertEqual(0, cleaned.getpixel((110, 64))[3])
+        self.assertGreater(cleaned.getpixel((160, 110))[3], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
