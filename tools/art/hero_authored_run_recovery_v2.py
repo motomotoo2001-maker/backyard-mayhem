@@ -155,8 +155,14 @@ def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
 
     normalized_bbox = _alpha_bbox(cleaned)
     if normalized_bbox is None or normalized_bbox[3] != int(ground_y) + 1:
+        components = cleanup._alpha_components(cleaned)
+        geometry = [
+            {"pixels": component.pixels, "bbox": component.bbox}
+            for component in components[:12]
+        ]
         raise ValueError(
-            f"Could not normalize {path.name} to ground pixel {ground_y}; bbox={normalized_bbox}"
+            f"Could not normalize {path.name} to ground pixel {ground_y}; "
+            f"bbox={normalized_bbox}; components={geometry}"
         )
     if normalized_bbox[1] < 6:
         raise ValueError(f"Ground normalization clips top margin in {path.name}: {normalized_bbox[1]}")
