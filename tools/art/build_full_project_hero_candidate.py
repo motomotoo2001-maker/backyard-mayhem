@@ -344,11 +344,11 @@ def _patch_full_project_grounding(project_root: Path) -> None:
     )
 
     process_old = '''    if active and _ghost != null:\n        _ghost.global_position = get_parent().get_global_mouse_position()\n        var valid := _is_valid_position(_ghost.global_position)\n        _ghost.modulate = Color(0.45,1.0,0.45,0.55) if valid else Color(1.0,0.25,0.25,0.55)\n        _ghost.visible = not is_building()\n        _refresh_range_preview(_ghost.global_position, valid)'''
-    process_new = '''    if active and _ghost != null:\n        var build_position := get_parent().get_global_mouse_position()\n        _ghost.global_position = build_position + _preview_visual_offset_for(selected)\n        var valid := _is_valid_position(build_position)\n        _ghost.modulate = Color(0.45,1.0,0.45,0.55) if valid else Color(1.0,0.25,0.25,0.55)\n        _ghost.visible = not is_building()\n        _refresh_range_preview(build_position, valid)'''
+    process_new = '''    if active and _ghost != null:\n        var build_position: Vector2 = get_parent().get_global_mouse_position()\n        _ghost.global_position = build_position + _preview_visual_offset_for(selected)\n        var valid := _is_valid_position(build_position)\n        _ghost.modulate = Color(0.45,1.0,0.45,0.55) if valid else Color(1.0,0.25,0.25,0.55)\n        _ghost.visible = not is_building()\n        _refresh_range_preview(build_position, valid)'''
     _replace_grounding_block(build_controller, process_old, process_new)
 
     select_old = '''        _ensure_ghost()\n        _ensure_range_preview()\n        _refresh_range_preview(_ghost.global_position, _is_valid_position(_ghost.global_position))'''
-    select_new = '''        _ensure_ghost()\n        _ensure_range_preview()\n        var preview_position := get_parent().get_global_mouse_position() if get_parent() is Node2D else Vector2.ZERO\n        _ghost.global_position = preview_position + _preview_visual_offset_for(selected)\n        _refresh_range_preview(preview_position, _is_valid_position(preview_position))'''
+    select_new = '''        _ensure_ghost()\n        _ensure_range_preview()\n        var preview_position: Vector2 = get_parent().get_global_mouse_position() if get_parent() is Node2D else Vector2.ZERO\n        _ghost.global_position = preview_position + _preview_visual_offset_for(selected)\n        _refresh_range_preview(preview_position, _is_valid_position(preview_position))'''
     _replace_grounding_block(build_controller, select_old, select_new)
 
     offset_marker = '''\nfunc _ghost_scale_for(kind: StringName) -> float:\n'''
