@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "art" / "build_full_project_hero_candidate.py"
+RECOVERY = ROOT / "tools" / "art" / "hero_authored_run_recovery_v2.py"
 
 
 def _load_candidate_module():
@@ -56,16 +57,14 @@ class FullProjectHeroCandidateCleanlinessTest(unittest.TestCase):
         marker = "_validate_authored_frame_cleanliness(frame, name, ground_y)"
         self.assertGreaterEqual(source.count(marker), 2)
 
-    def test_candidate_cleanup_runs_before_validation(self):
-        source = SCRIPT.read_text(encoding="utf-8")
-        cleanup_marker = "cleanup.clean_candidate(candidate_dir, ground_y=builder.ANCHOR[1])"
-        validate_marker = "_validate_candidate_frames("
-        self.assertIn(cleanup_marker, source)
-        cleanup_pos = source.find(cleanup_marker)
-        main_pos = source.find("def main()")
-        validate_pos = source.find(validate_marker, main_pos)
-        self.assertGreater(cleanup_pos, main_pos)
-        self.assertGreater(validate_pos, cleanup_pos)
+    def test_projection_recovery_cleans_before_frames_are_returned(self):
+        source = RECOVERY.read_text(encoding="utf-8")
+        self.assertIn('CLEANUP_PATH = Path(__file__).with_name("hero_candidate_cleanup.py")', source)
+        self.assertIn("cleanup.clean_frame(image, ground_y=int(ground_y), safe_margin=8)", source)
+        cleanup_pos = source.find("cleanup.clean_frame(image, ground_y=int(ground_y), safe_margin=8)")
+        save_pos = source.find("cleaned.save(path)", cleanup_pos)
+        self.assertGreater(cleanup_pos, source.find("def _normalize_ground"))
+        self.assertGreater(save_pos, cleanup_pos)
 
 
 if __name__ == "__main__":
