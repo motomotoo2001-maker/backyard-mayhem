@@ -7,8 +7,8 @@ rows into a single connected component. In that case this wrapper falls back to 
 projection-based recovery pipeline, which is independently regression-tested.
 
 Both extraction paths are followed by a conservative presentation-chrome cleanup.
-This specifically removes short, wide label bands that can be pulled above a pose
-when neighboring authored rows are vertically joined, without relying on label color.
+Detached short, wide label bands may be removed, but connected hero geometry is never
+cut just because shoulders, robe or the leaf-blower form a broad horizontal run.
 
 A final ground-stability gate rejects sequences whose support line jumps far between
 frames. This catches a visually expensive failure mode where otherwise valid authored
@@ -66,13 +66,41 @@ def _longest_run(alpha, y: int, left: int, right: int) -> int:
     return best
 
 
-def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
-    """Remove a short wide label band near the top of an extracted runtime frame.
+def _band_touches_foreground_outside(
+    alpha,
+    start: int,
+    end: int,
+    left: int,
+    right: int,
+    image_height: int,
+) -> bool:
+    """Return True when a candidate band is physically connected to hero geometry.
 
-    Joined source rows can place the previous row's RUN label above the recovered
-    character. Hero body silhouettes do not form a long horizontal slab in the top
-    third, so require a wide, shallow band before removing anything. Once such a
-    band is confirmed, clear only low-alpha resize halo immediately around it.
+    A broad shoulder/weapon row can look like presentation chrome in a projection,
+    but it remains 8-connected to the body directly above or below the band. A real
+    detached RUN label has a transparent gap. Only detached bands are safe to erase.
+    """
+
+    for x in range(left, right):
+        # Check diagonal/vertical connectivity across the top band boundary.
+        if start > 0:
+            for nx in range(max(left, x - 1), min(right, x + 2)):
+                if alpha[x, start] > 16 and alpha[nx, start - 1] > 16:
+                    return True
+        # Check diagonal/vertical connectivity across the bottom band boundary.
+        if end < image_height:
+            for nx in range(max(left, x - 1), min(right, x + 2)):
+                if alpha[x, end - 1] > 16 and alpha[nx, end] > 16:
+                    return True
+    return False
+
+
+def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
+    """Remove only a detached short wide presentation band near the frame top.
+
+    Earlier versions deleted every wide/shallow row band and could slice through the
+    connected shoulder/leaf-blower silhouette. This version requires a real transparent
+    separation from foreground outside the candidate band before it removes pixels.
     """
 
     rgba = image.convert("RGBA")
@@ -120,6 +148,10 @@ def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
         # A presentation label is deliberately much wider than it is tall.
         if peak < band_height * 2.8:
             continue
+        # Never cut connected hero geometry. Shoulders, robe or the blower may be
+        # wide, but a detached label is separated by transparent pixels.
+        if _band_touches_foreground_outside(alpha, start, end, left, right, rgba.height):
+            continue
         for yy in range(start, end):
             for xx in range(left, right):
                 pixels[xx, yy] = (0, 0, 0, 0)
@@ -129,8 +161,8 @@ def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
         return rgba
 
     # Lanczos resize can leave a 1-2 px semi-transparent halo outside a removed
-    # opaque label. Limit cleanup to a narrow neighborhood of a confirmed band
-    # and only to low-alpha pixels, so body/weapon antialiasing elsewhere stays.
+    # opaque label. Limit cleanup to a narrow neighborhood of a confirmed detached
+    # band and only to low-alpha pixels, so body/weapon antialiasing elsewhere stays.
     for start, end in removed_ranges:
         halo_top = max(top, start - 6)
         halo_bottom = min(bottom, end + 6)
@@ -175,12 +207,7 @@ def _validate_ground_stability(
     ground_y: int = 292,
     max_drift_px: int = MAX_GROUND_DRIFT_PX,
 ) -> None:
-    """Reject vertically unstable authored RUN sequences before runtime publish.
-
-    Runtime RUN frames are normalized around a shared ground anchor. A small change in
-    alpha-bounds is expected as feet and the hose move, but a large support-line jump
-    almost always means a neighboring source band or wrong crop was selected.
-    """
+    """Reject vertically unstable authored RUN sequences before runtime publish."""
 
     if max_drift_px < 0:
         raise ValueError(f"max_drift_px must be non-negative, got {max_drift_px}")
