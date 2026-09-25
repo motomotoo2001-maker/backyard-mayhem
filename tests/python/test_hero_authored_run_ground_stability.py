@@ -83,6 +83,27 @@ class AuthoredRunGroundStabilityTest(unittest.TestCase):
                     max_drift_px=24,
                 )
 
+    def test_upper_presentation_cleanup_does_not_slice_connected_shoulders(self):
+        module = _load_module()
+        image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        # Tall body with a wide shoulder / leaf-blower silhouette in the upper third.
+        # This is one connected character component and must never be treated as a
+        # detached RUN label simply because several rows are wide and shallow.
+        draw.rounded_rectangle((122, 76, 202, 292), radius=12, fill=(133, 84, 176, 255))
+        draw.rectangle((86, 104, 238, 122), fill=(133, 84, 176, 255))
+        draw.rectangle((198, 108, 252, 116), fill=(232, 137, 50, 255))
+
+        cleaned = module._strip_upper_presentation_band(image)
+
+        # The connected shoulder bar and blower must survive untouched.
+        self.assertGreater(cleaned.getpixel((90, 112))[3], 0)
+        self.assertGreater(cleaned.getpixel((235, 112))[3], 0)
+        self.assertGreater(cleaned.getpixel((245, 112))[3], 0)
+        original_alpha = sum(1 for value in image.getchannel("A").getdata() if value > 16)
+        cleaned_alpha = sum(1 for value in cleaned.getchannel("A").getdata() if value > 16)
+        self.assertEqual(original_alpha, cleaned_alpha)
+
 
 if __name__ == "__main__":
     unittest.main()
