@@ -1,0 +1,111 @@
+name: Patch Grounding Cleanliness Integration
+
+on:
+  push:
+    branches:
+      - dev/backyard-vertical-slice
+    paths:
+      - .github/workflows/patch-grounding-cleanliness.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout active development branch
+        uses: actions/checkout@v5
+        with:
+          ref: dev/backyard-vertical-slice
+          fetch-depth: 1
+
+      - name: Wire cleanup validator into full-project candidate builder
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/art/build_full_project_hero_candidate.py')
+          text = path.read_text(encoding='utf-8')
+
+          if 'CLEANUP_PATH = HERE / "hero_candidate_cleanup.py"' not in text:
+              anchor = 'RECOVERY_PATH = HERE / "hero_authored_run_recovery_v2.py"\n'
+              if anchor not in text:
+                  raise SystemExit('cleanup constant anchor missing')
+              text = text.replace(
+                  anchor,
+                  anchor + 'CLEANUP_PATH = HERE / "hero_candidate_cleanup.py"\n',
+                  1,
+              )
+
+          if 'def _validate_authored_frame_cleanliness(' not in text:
+              anchor = '\ndef _validate_authored_fire_frames(\n'
+              if anchor not in text:
+                  raise SystemExit('validator insertion anchor missing')
+              helper = r'''
+
+def _validate_authored_frame_cleanliness(
+    frame: Image.Image,
+    name: str,
+    ground_y: int,
+) -> None:
+    """Reject floating body anchors and distant alpha debris in authored hero frames."""
+    cleanup = _load_module(CLEANUP_PATH, "backyard_hero_candidate_cleanup_validator")
+    components = cleanup._alpha_components(frame.convert("RGBA"))
+    if not components:
+        raise RuntimeError(f"{name}: empty authored frame")
+
+    main = components[0]
+    body_bottom = main.bbox[3] - 1
+    if abs(body_bottom - int(ground_y)) > 3:
+        raise RuntimeError(
+            f"{name}: body ground anchor drift {body_bottom - int(ground_y):+d}px; "
+            f"expected {int(ground_y)}±3"
+        )
+
+    max_dx = max(42, int(main.width * 0.60))
+    max_dy = max(28, int(main.height * 0.18))
+    significant = max(36, int(main.pixels * 0.018))
+    for component in components[1:]:
+        if component.pixels < significant:
+            continue
+        dx, dy = cleanup._bbox_gap(main.bbox, component.bbox)
+        if dx > max_dx or dy > max_dy:
+            raise RuntimeError(
+                f"{name}: detached alpha island area={component.pixels} gap=({dx},{dy})"
+            )
+'''
+              text = text.replace(anchor, helper + anchor, 1)
+
+          fire_anchor = '''            with Image.open(path) as source:\n                frame = source.convert("RGBA")\n            if frame.size != expected_size:\n'''
+          fire_replacement = '''            with Image.open(path) as source:\n                frame = source.convert("RGBA")\n            _validate_authored_frame_cleanliness(frame, name, ground_y)\n            if frame.size != expected_size:\n'''
+          if text.count('_validate_authored_frame_cleanliness(frame, name, ground_y)') < 1:
+              if fire_anchor not in text:
+                  raise SystemExit('fire validation anchor missing')
+              text = text.replace(fire_anchor, fire_replacement, 1)
+
+          run_anchor = '''        for name in run_names:\n            with Image.open(frames_dir / name) as source:\n                frame = source.convert("RGBA")\n            bbox = frame.getchannel("A").getbbox()\n'''
+          run_replacement = '''        for name in run_names:\n            with Image.open(frames_dir / name) as source:\n                frame = source.convert("RGBA")\n            _validate_authored_frame_cleanliness(frame, name, ground_y)\n            bbox = frame.getchannel("A").getbbox()\n'''
+          if text.count('_validate_authored_frame_cleanliness(frame, name, ground_y)') < 2:
+              if run_anchor not in text:
+                  raise SystemExit('run validation anchor missing')
+              text = text.replace(run_anchor, run_replacement, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('wired authored-frame cleanliness validation into RUN and FIRE candidate gates')
+          PY
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- tools/art/build_full_project_hero_candidate.py; then
+            echo 'No patch required.'
+            exit 0
+          fi
+          git config user.name 'Backyard Mayhem CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tools/art/build_full_project_hero_candidate.py
+          git commit -m 'fix: validate authored hero cleanup and ground anchor'
+          git push origin HEAD:dev/backyard-vertical-slice
