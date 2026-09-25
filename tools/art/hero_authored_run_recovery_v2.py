@@ -11,12 +11,22 @@ from PIL import Image, ImageDraw
 
 
 BASE_PATH = Path(__file__).with_name("hero_authored_run_recovery.py")
+CLEANUP_PATH = Path(__file__).with_name("hero_candidate_cleanup.py")
 
 
 def _load_base():
     spec = importlib.util.spec_from_file_location("hero_authored_run_recovery_base", BASE_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load recovery base from {BASE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_cleanup():
+    spec = importlib.util.spec_from_file_location("hero_candidate_cleanup_for_run_recovery", CLEANUP_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load hero cleanup from {CLEANUP_PATH}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -123,20 +133,27 @@ def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
 def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
     with Image.open(path) as source:
         image = source.convert("RGBA")
+
+    # First remove obvious projection/chrome leftovers from the recovery crop.
     image = _strip_wide_bottom_slab(image)
     image = _strip_connected_lower_chrome(image)
-    bbox = _alpha_bbox(image)
-    if bbox is None:
-        raise ValueError(f"Recovered frame is empty: {path.name}")
-    shift_y = ground_y - bbox[3]
-    shifted = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
-    shifted.alpha_composite(image, (0, shift_y))
-    normalized_bbox = _alpha_bbox(shifted)
-    if normalized_bbox is None or normalized_bbox[3] != ground_y:
-        raise ValueError(f"Could not normalize {path.name} to ground {ground_y}; bbox={normalized_bbox}")
+
+    # Then use the same connected-component cleanup as the full-project candidate.
+    # This removes neighbouring limbs/labels that can share x-range with the hero but
+    # are vertically detached, while keeping nearby weapon/hose pieces. clean_frame()
+    # also grounds the main body by its last visible pixel, so ground_y=306 means
+    # alpha bbox.bottom == 307 (Pillow bbox end is exclusive).
+    cleanup = _load_cleanup()
+    cleaned, _stats = cleanup.clean_frame(image, ground_y=int(ground_y), safe_margin=8)
+
+    normalized_bbox = _alpha_bbox(cleaned)
+    if normalized_bbox is None or normalized_bbox[3] != int(ground_y) + 1:
+        raise ValueError(
+            f"Could not normalize {path.name} to ground pixel {ground_y}; bbox={normalized_bbox}"
+        )
     if normalized_bbox[1] < 6:
         raise ValueError(f"Ground normalization clips top margin in {path.name}: {normalized_bbox[1]}")
-    shifted.save(path)
+    cleaned.save(path)
 
 
 def _write_contact_sheet(paths: Sequence[Path], destination: Path, directions: Sequence[str]) -> None:
