@@ -1,5 +1,5 @@
 name: Godot Tests
-# verification retrigger after authored hero grounding/cleanliness patch 2026-09-25
+# verification retrigger after Python 3.12 loader + hero grounding cleanup patch 2026-09-25
 
 on:
   push:
