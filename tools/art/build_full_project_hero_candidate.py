@@ -199,9 +199,6 @@ def _validate_candidate_frames(
     if not 0 < int(ground_y) < expected_size[1]:
         raise RuntimeError(f"Invalid shared hero ground anchor: {ground_y}")
 
-    # Baseline contract for every state: the resource must exist, be non-empty and
-    # use the production canvas. States already promoted to authored production art
-    # receive stricter state-specific validation below.
     names = sorted({name for frame_names in generated.values() for name in frame_names})
     if not names:
         raise RuntimeError("Hero candidate did not generate any frames")
@@ -224,8 +221,6 @@ def _validate_candidate_frames(
         ):
             print(f"WARNING: legacy non-authored frame touches runtime canvas edge: {name} {bbox}")
 
-    # RUN gets the stricter production contract: 8 authored frames per direction,
-    # safe margins and meaningful pose variation (not a duplicated static frame).
     for direction in directions:
         run_names = list(generated.get(("run", direction), []))
         if len(run_names) != 8:
@@ -314,15 +309,60 @@ def _publish_candidate(frames_dir: Path, runtime_dir: Path) -> None:
     shutil.copy2(spriteframes, runtime_tres)
 
 
+def _chair_visual_offset() -> tuple[float, float]:
+    """Match the placed Chair Sprite2D visual offset exactly."""
+    return (0.0, -32.0)
+
+
+def _replace_grounding_block(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if new in text:
+        return
+    if old not in text:
+        raise RuntimeError(f"Grounding patch contract changed unexpectedly: {path}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+def _patch_full_project_grounding(project_root: Path) -> None:
+    """Align hero/chair shadows and make the green Chair preview use the placed visual anchor."""
+    player_scene = project_root / "scenes/player/player.tscn"
+    chair_scene = project_root / "scenes/defenses/chair_barricade.tscn"
+    build_controller = project_root / "scripts/build/build_controller.gd"
+    for path in (player_scene, chair_scene, build_controller):
+        if not path.is_file():
+            raise RuntimeError(f"Grounding target missing from full project: {path}")
+
+    _replace_grounding_block(
+        player_scene,
+        '[node name="Shadow" type="Polygon2D" parent="VisualRoot"]\npolygon = PackedVector2Array(-34, -2, -24, -8, 24, -8, 34, -2, 24, 5, -24, 5)\nposition = Vector2(0, 30)',
+        '[node name="Shadow" type="Polygon2D" parent="VisualRoot"]\npolygon = PackedVector2Array(-34, -2, -24, -8, 24, -8, 34, -2, 24, 5, -24, 5)\nposition = Vector2(0, 6)',
+    )
+    _replace_grounding_block(
+        chair_scene,
+        '[node name="Shadow" type="Polygon2D" parent="."]\npolygon = PackedVector2Array(-38, 0, -27, -8, 27, -8, 38, 0, 27, 8, -27, 8)\nposition = Vector2(0, 24)',
+        '[node name="Shadow" type="Polygon2D" parent="."]\npolygon = PackedVector2Array(-38, 0, -27, -8, 27, -8, 38, 0, 27, 8, -27, 8)\nposition = Vector2(0, 6)',
+    )
+
+    process_old = '''    if active and _ghost != null:\n        _ghost.global_position = get_parent().get_global_mouse_position()\n        var valid := _is_valid_position(_ghost.global_position)\n        _ghost.modulate = Color(0.45,1.0,0.45,0.55) if valid else Color(1.0,0.25,0.25,0.55)\n        _ghost.visible = not is_building()\n        _refresh_range_preview(_ghost.global_position, valid)'''
+    process_new = '''    if active and _ghost != null:\n        var build_position := get_parent().get_global_mouse_position()\n        _ghost.global_position = build_position + _preview_visual_offset_for(selected)\n        var valid := _is_valid_position(build_position)\n        _ghost.modulate = Color(0.45,1.0,0.45,0.55) if valid else Color(1.0,0.25,0.25,0.55)\n        _ghost.visible = not is_building()\n        _refresh_range_preview(build_position, valid)'''
+    _replace_grounding_block(build_controller, process_old, process_new)
+
+    select_old = '''        _ensure_ghost()\n        _ensure_range_preview()\n        _refresh_range_preview(_ghost.global_position, _is_valid_position(_ghost.global_position))'''
+    select_new = '''        _ensure_ghost()\n        _ensure_range_preview()\n        var preview_position := get_parent().get_global_mouse_position() if get_parent() is Node2D else Vector2.ZERO\n        _ghost.global_position = preview_position + _preview_visual_offset_for(selected)\n        _refresh_range_preview(preview_position, _is_valid_position(preview_position))'''
+    _replace_grounding_block(build_controller, select_old, select_new)
+
+    offset_marker = '''\nfunc _ghost_scale_for(kind: StringName) -> float:\n'''
+    offset_function = '''\nfunc _preview_visual_offset_for(kind: StringName) -> Vector2:\n    match kind:\n        &"chair": return Vector2(0, -32)\n    return Vector2.ZERO\n\nfunc _ghost_scale_for(kind: StringName) -> float:\n'''
+    _replace_grounding_block(build_controller, offset_marker, offset_function)
+    print("Applied full-project grounding patch: hero shadow, Chair shadow, Chair build preview")
+
+
 def main() -> None:
     args = _parse_args()
     builder = _load_module(BUILDER_PATH, "backyard_hero_builder")
     pipeline = _load_module(PIPELINE_PATH, "backyard_authored_run_pipeline")
     _print_sheet_diagnostics(pipeline, builder.MOVE_SRC)
 
-    # Candidate staging exercises the exact shared production extractors imported
-    # by the builder. No monkeypatch is allowed here: if RUN or FIRE extraction is
-    # not production-safe, the full-project candidate must fail before apply.
     movement = builder.movement_frames()
     actions = builder.action_frames(movement)
 
@@ -368,6 +408,7 @@ def main() -> None:
 
     if args.apply:
         _publish_candidate(frames_dir, runtime_dir)
+        _patch_full_project_grounding(PROJECT_ROOT)
         print(f"APPLIED validated hero candidate to: {runtime_dir}")
     else:
         print("Runtime unchanged. Re-run with --apply only after visual review.")
