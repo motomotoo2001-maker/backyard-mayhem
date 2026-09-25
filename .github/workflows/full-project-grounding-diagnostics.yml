@@ -7,6 +7,8 @@ on:
     paths:
       - .github/workflows/full-project-grounding-diagnostics.yml
       - tools/art/build_full_project_hero_candidate.py
+      - tools/art/hero_candidate_cleanup.py
+      - tools/art/hero_authored_run_recovery_v2.py
   workflow_dispatch:
 
 jobs:
