@@ -137,6 +137,28 @@ def _strip_connected_lower_chrome(image: Image.Image) -> Image.Image:
     return cleaned
 
 
+def _clear_alpha_below_ground(image: Image.Image, ground_y: int) -> Image.Image:
+    """Remove sub-threshold antialias residue below the shared hero floor.
+
+    Connected-component cleanup deliberately ignores very faint alpha so it does not
+    chew up normal antialiasing around hair, robe, hose and weapon contours. Pixels
+    below the declared floor are different: no authored hero geometry may exist there.
+    Clearing only those rows keeps the contour quality everywhere else while making
+    raw Pillow bounds agree with the gameplay ground anchor.
+    """
+
+    rgba = image.convert("RGBA").copy()
+    first_forbidden_y = max(0, int(ground_y) + 1)
+    if first_forbidden_y >= rgba.height:
+        return rgba
+    pixels = rgba.load()
+    for y in range(first_forbidden_y, rgba.height):
+        for x in range(rgba.width):
+            if pixels[x, y][3] > 0:
+                pixels[x, y] = (0, 0, 0, 0)
+    return rgba
+
+
 def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
     with Image.open(path) as source:
         image = source.convert("RGBA")
@@ -146,6 +168,7 @@ def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
 
     cleanup = _load_cleanup()
     cleaned, stats = cleanup.clean_frame(image, ground_y=int(ground_y), safe_margin=8)
+    cleaned = _clear_alpha_below_ground(cleaned, int(ground_y))
     if stats["removed_pixels"] or stats["shift_y"]:
         print(
             f"Recovered RUN cleanup {path.name}: "
@@ -153,15 +176,28 @@ def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
             f"body_bottom={stats['body_bottom']}"
         )
 
-    normalized_bbox = _alpha_bbox(cleaned)
-    if normalized_bbox is None or normalized_bbox[3] != int(ground_y) + 1:
-        components = cleanup._alpha_components(cleaned)
+    components = cleanup._alpha_components(cleaned)
+    if not components:
+        raise ValueError(f"Could not normalize {path.name}; cleanup left no body component")
+    main_bottom = components[0].bbox[3] - 1
+    if main_bottom != int(ground_y):
         geometry = [
             {"pixels": component.pixels, "bbox": component.bbox}
             for component in components[:12]
         ]
         raise ValueError(
-            f"Could not normalize {path.name} to ground pixel {ground_y}; "
+            f"Could not normalize {path.name} main body to ground pixel {ground_y}; "
+            f"main_bottom={main_bottom}; components={geometry}"
+        )
+
+    normalized_bbox = cleaned.getchannel("A").getbbox()
+    if normalized_bbox is None or normalized_bbox[3] != int(ground_y) + 1:
+        geometry = [
+            {"pixels": component.pixels, "bbox": component.bbox}
+            for component in components[:12]
+        ]
+        raise ValueError(
+            f"Could not normalize {path.name} raw alpha to ground pixel {ground_y}; "
             f"bbox={normalized_bbox}; components={geometry}"
         )
     if normalized_bbox[1] < 6:
