@@ -102,6 +102,34 @@ def _bbox_gap(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> tup
     return dx, dy
 
 
+def _looks_like_upper_presentation_band(main: Component, component: Component) -> bool:
+    """Identify a detached RUN/label band sitting immediately above the hero body.
+
+    Real source sheets sometimes place a wide, shallow presentation label only a few
+    pixels above the head. A plain proximity rule mistakes it for a detached weapon
+    or hose segment. Require geometry that is characteristic of a label: fully above
+    the body, close vertically, wide relative to the body, shallow, and strongly
+    horizontal. This keeps small round/square weapon pieces intact.
+    """
+
+    if component.bbox[3] > main.bbox[1]:
+        return False
+    _dx, dy = _bbox_gap(main.bbox, component.bbox)
+    if dy > max(14, int(main.height * 0.08)):
+        return False
+
+    width_ratio = component.width / max(1, main.width)
+    height_ratio = component.height / max(1, main.height)
+    aspect = component.width / max(1, component.height)
+    area_ratio = component.pixels / max(1, main.pixels)
+    return (
+        width_ratio >= 0.28
+        and height_ratio <= 0.18
+        and aspect >= 2.4
+        and area_ratio >= 0.02
+    )
+
+
 def _kept_components(components: list[Component]) -> tuple[Component, list[Component]]:
     if not components:
         raise RuntimeError("hero frame has no visible foreground")
@@ -114,6 +142,11 @@ def _kept_components(components: list[Component]) -> tuple[Component, list[Compo
 
     for component in components[1:]:
         dx, dy = _bbox_gap(main.bbox, component.bbox)
+        # Joined source rows can leave a wide RUN label just 2-5 px above the
+        # hero's head. Remove it before the generic proximity rule has a chance
+        # to preserve it as if it were a detached hose/weapon segment.
+        if _looks_like_upper_presentation_band(main, component):
+            continue
         # Detached pieces below the main feet are crop contamination even when they
         # are spatially close in X/Y. Keeping them would constrain the frame shift
         # and make the actual hero float above the shared ground line.
