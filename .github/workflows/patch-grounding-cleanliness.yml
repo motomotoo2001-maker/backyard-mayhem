@@ -78,35 +78,15 @@ jobs:
               ''')
               text = text.replace(anchor, "\n" + helper + anchor, 1)
 
-          fire_anchor = dedent('''
-                      with Image.open(path) as source:
-                          frame = source.convert("RGBA")
-                      if frame.size != expected_size:
-          ''').lstrip("\n")
-          fire_replacement = dedent('''
-                      with Image.open(path) as source:
-                          frame = source.convert("RGBA")
-                      _validate_authored_frame_cleanliness(frame, name, ground_y)
-                      if frame.size != expected_size:
-          ''').lstrip("\n")
+          fire_anchor = '            with Image.open(path) as source:\n                frame = source.convert("RGBA")\n            if frame.size != expected_size:\n'
+          fire_replacement = '            with Image.open(path) as source:\n                frame = source.convert("RGBA")\n            _validate_authored_frame_cleanliness(frame, name, ground_y)\n            if frame.size != expected_size:\n'
           if text.count("_validate_authored_frame_cleanliness(frame, name, ground_y)") < 1:
               if fire_anchor not in text:
                   raise SystemExit("fire validation anchor missing")
               text = text.replace(fire_anchor, fire_replacement, 1)
 
-          run_anchor = dedent('''
-                  for name in run_names:
-                      with Image.open(frames_dir / name) as source:
-                          frame = source.convert("RGBA")
-                      bbox = frame.getchannel("A").getbbox()
-          ''').lstrip("\n")
-          run_replacement = dedent('''
-                  for name in run_names:
-                      with Image.open(frames_dir / name) as source:
-                          frame = source.convert("RGBA")
-                      _validate_authored_frame_cleanliness(frame, name, ground_y)
-                      bbox = frame.getchannel("A").getbbox()
-          ''').lstrip("\n")
+          run_anchor = '        for name in run_names:\n            with Image.open(frames_dir / name) as source:\n                frame = source.convert("RGBA")\n            bbox = frame.getchannel("A").getbbox()\n'
+          run_replacement = '        for name in run_names:\n            with Image.open(frames_dir / name) as source:\n                frame = source.convert("RGBA")\n            _validate_authored_frame_cleanliness(frame, name, ground_y)\n            bbox = frame.getchannel("A").getbbox()\n'
           if text.count("_validate_authored_frame_cleanliness(frame, name, ground_y)") < 2:
               if run_anchor not in text:
                   raise SystemExit("run validation anchor missing")
