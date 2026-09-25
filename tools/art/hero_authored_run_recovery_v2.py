@@ -134,17 +134,17 @@ def _normalize_ground(path: Path, canvas_size: int, ground_y: int) -> None:
     with Image.open(path) as source:
         image = source.convert("RGBA")
 
-    # First remove obvious projection/chrome leftovers from the recovery crop.
     image = _strip_wide_bottom_slab(image)
     image = _strip_connected_lower_chrome(image)
 
-    # Then use the same connected-component cleanup as the full-project candidate.
-    # This removes neighbouring limbs/labels that can share x-range with the hero but
-    # are vertically detached, while keeping nearby weapon/hose pieces. clean_frame()
-    # also grounds the main body by its last visible pixel, so ground_y=306 means
-    # alpha bbox.bottom == 307 (Pillow bbox end is exclusive).
     cleanup = _load_cleanup()
-    cleaned, _stats = cleanup.clean_frame(image, ground_y=int(ground_y), safe_margin=8)
+    cleaned, stats = cleanup.clean_frame(image, ground_y=int(ground_y), safe_margin=8)
+    if stats["removed_pixels"] or stats["shift_y"]:
+        print(
+            f"Recovered RUN cleanup {path.name}: "
+            f"removed={stats['removed_pixels']}px shift_y={stats['shift_y']:+d} "
+            f"body_bottom={stats['body_bottom']}"
+        )
 
     normalized_bbox = _alpha_bbox(cleaned)
     if normalized_bbox is None or normalized_bbox[3] != int(ground_y) + 1:
