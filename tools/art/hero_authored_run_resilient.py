@@ -7,8 +7,9 @@ rows into a single connected component. In that case this wrapper falls back to 
 projection-based recovery pipeline, which is independently regression-tested.
 
 Both extraction paths are followed by a conservative presentation-chrome cleanup.
-Detached short, wide label bands may be removed, but connected hero geometry is never
-cut just because shoulders, robe or the leaf-blower form a broad horizontal run.
+Detached short, wide label bands may be removed, and bands connected only by a tiny
+sheet/antialias bridge are treated as presentation chrome. Strongly connected shoulders,
+robe and leaf-blower geometry are never cut merely because they form a wide row band.
 
 A final ground-stability gate rejects sequences whose support line jumps far between
 frames. This catches a visually expensive failure mode where otherwise valid authored
@@ -66,41 +67,85 @@ def _longest_run(alpha, y: int, left: int, right: int) -> int:
     return best
 
 
-def _band_touches_foreground_outside(
+def _boundary_connection_count(
+    alpha,
+    inside_y: int,
+    outside_y: int,
+    left: int,
+    right: int,
+) -> int:
+    """Count distinct band pixels that are 8-connected across one band boundary."""
+
+    if inside_y < 0 or outside_y < 0:
+        return 0
+    connected_x: set[int] = set()
+    for x in range(left, right):
+        if alpha[x, inside_y] <= 16:
+            continue
+        for nx in range(max(left, x - 1), min(right, x + 2)):
+            if alpha[nx, outside_y] > 16:
+                connected_x.add(x)
+                break
+    return len(connected_x)
+
+
+def _band_boundary_connections(
     alpha,
     start: int,
     end: int,
     left: int,
     right: int,
     image_height: int,
-) -> bool:
-    """Return True when a candidate band is physically connected to hero geometry.
+) -> tuple[int, int]:
+    top = 0
+    bottom = 0
+    if start > 0:
+        top = _boundary_connection_count(alpha, start, start - 1, left, right)
+    if end < image_height:
+        bottom = _boundary_connection_count(alpha, end - 1, end, left, right)
+    return top, bottom
 
-    A broad shoulder/weapon row can look like presentation chrome in a projection,
-    but it remains 8-connected to the body directly above or below the band. A real
-    detached RUN label has a transparent gap. Only detached bands are safe to erase.
+
+def _clear_narrow_connector(
+    pixels,
+    alpha,
+    *,
+    start_y: int,
+    step: int,
+    left: int,
+    right: int,
+    image_height: int,
+    width_limit: int,
+    max_rows: int,
+) -> None:
+    """Erase a thin bridge between a rejected label band and the real body.
+
+    Only runs whose visible width remains small are removed. Scanning stops as soon as
+    we hit broad hero geometry, so shoulders/body are not trimmed.
     """
 
-    for x in range(left, right):
-        # Check diagonal/vertical connectivity across the top band boundary.
-        if start > 0:
-            for nx in range(max(left, x - 1), min(right, x + 2)):
-                if alpha[x, start] > 16 and alpha[nx, start - 1] > 16:
-                    return True
-        # Check diagonal/vertical connectivity across the bottom band boundary.
-        if end < image_height:
-            for nx in range(max(left, x - 1), min(right, x + 2)):
-                if alpha[x, end - 1] > 16 and alpha[nx, end] > 16:
-                    return True
-    return False
+    y = start_y
+    scanned = 0
+    while 0 <= y < image_height and scanned < max_rows:
+        run = _longest_run(alpha, y, left, right)
+        if run <= 0:
+            break
+        if run > width_limit:
+            break
+        for x in range(left, right):
+            if alpha[x, y] > 16:
+                pixels[x, y] = (0, 0, 0, 0)
+        y += step
+        scanned += 1
 
 
 def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
-    """Remove only a detached short wide presentation band near the frame top.
+    """Remove a short wide presentation band without cutting real hero geometry.
 
-    Earlier versions deleted every wide/shallow row band and could slice through the
-    connected shoulder/leaf-blower silhouette. This version requires a real transparent
-    separation from foreground outside the candidate band before it removes pixels.
+    A real shoulder/weapon band is joined to the body by a broad boundary. Labels may
+    be fully detached or connected by only a tiny sheet/antialias bridge. We therefore
+    compare boundary-contact width instead of treating any single touching pixel as a
+    reason to preserve the whole band.
     """
 
     rgba = image.convert("RGBA")
@@ -145,24 +190,53 @@ def _strip_upper_presentation_band(image: Image.Image) -> Image.Image:
         band_height = end - start
         if band_height < 2 or band_height > max_band_height:
             continue
-        # A presentation label is deliberately much wider than it is tall.
         if peak < band_height * 2.8:
             continue
-        # Never cut connected hero geometry. Shoulders, robe or the blower may be
-        # wide, but a detached label is separated by transparent pixels.
-        if _band_touches_foreground_outside(alpha, start, end, left, right, rgba.height):
+
+        top_contacts, bottom_contacts = _band_boundary_connections(
+            alpha, start, end, left, right, rgba.height
+        )
+        # Broad anatomical/weapon geometry has a substantial contact width. Tiny
+        # 1-2 px source-sheet bridges should not protect an otherwise label-like band.
+        strong_contact_threshold = max(8, int(peak * 0.08))
+        if max(top_contacts, bottom_contacts) >= strong_contact_threshold:
             continue
+
         for yy in range(start, end):
             for xx in range(left, right):
                 pixels[xx, yy] = (0, 0, 0, 0)
         removed_ranges.append((start, end))
 
+        connector_width_limit = max(5, int(peak * 0.08))
+        connector_rows = max(8, min(32, int(height * 0.18)))
+        if top_contacts > 0:
+            _clear_narrow_connector(
+                pixels,
+                alpha,
+                start_y=start - 1,
+                step=-1,
+                left=left,
+                right=right,
+                image_height=rgba.height,
+                width_limit=connector_width_limit,
+                max_rows=connector_rows,
+            )
+        if bottom_contacts > 0:
+            _clear_narrow_connector(
+                pixels,
+                alpha,
+                start_y=end,
+                step=1,
+                left=left,
+                right=right,
+                image_height=rgba.height,
+                width_limit=connector_width_limit,
+                max_rows=connector_rows,
+            )
+
     if not removed_ranges:
         return rgba
 
-    # Lanczos resize can leave a 1-2 px semi-transparent halo outside a removed
-    # opaque label. Limit cleanup to a narrow neighborhood of a confirmed detached
-    # band and only to low-alpha pixels, so body/weapon antialiasing elsewhere stays.
     for start, end in removed_ranges:
         halo_top = max(top, start - 6)
         halo_bottom = min(bottom, end + 6)
@@ -207,8 +281,6 @@ def _validate_ground_stability(
     ground_y: int = 292,
     max_drift_px: int = MAX_GROUND_DRIFT_PX,
 ) -> None:
-    """Reject vertically unstable authored RUN sequences before runtime publish."""
-
     if max_drift_px < 0:
         raise ValueError(f"max_drift_px must be non-negative, got {max_drift_px}")
 
@@ -263,8 +335,6 @@ def build_authored_run_frames(
     ground_y: int = 292,
     contact_sheet_path: Path | str | None = None,
 ) -> list[Path]:
-    """Build production RUN frames using strict detection with tested recovery fallback."""
-
     destination = Path(output_dir)
     _reset_output_dir(destination)
     try:
