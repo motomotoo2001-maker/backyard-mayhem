@@ -48,6 +48,7 @@ jobs:
             hero_authored_run_recovery.py \
             hero_authored_run_recovery_v2.py \
             hero_authored_fire_pipeline.py \
+            hero_candidate_cleanup.py \
             build_full_project_hero_candidate.py; do
             cp "tools/art/$file" "$FULL_ROOT/tools/art/$file"
           done
@@ -119,6 +120,25 @@ jobs:
           grep -n -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|Error at' /tmp/full-candidate-editor.log || true
           exit 0
 
+      - name: Capture live grounding candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb scrot
+          cd "$FULL_ROOT"
+          rm -f /tmp/grounding-live.png
+          xvfb-run -a -s '-screen 0 1280x720x24' bash -lc '
+            export GODOT_SILENCE_ROOT_WARNING=1
+            "$GODOT_BIN" --path . > /tmp/grounding-live.log 2>&1 &
+            pid=$!
+            sleep 5
+            scrot /tmp/grounding-live.png
+            kill $pid 2>/dev/null || true
+            wait $pid 2>/dev/null || true
+          '
+          test -s /tmp/grounding-live.png
+
       - name: Upload grounding diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,6 +147,8 @@ jobs:
           path: |
             /tmp/grounding-diagnostics.txt
             /tmp/full-candidate-editor.log
+            /tmp/grounding-live.log
+            /tmp/grounding-live.png
             ${{ env.FULL_ROOT }}/scenes/player/player.tscn
             ${{ env.FULL_ROOT }}/scenes/defenses/chair_barricade.tscn
             ${{ env.FULL_ROOT }}/scripts/build/build_controller.gd
