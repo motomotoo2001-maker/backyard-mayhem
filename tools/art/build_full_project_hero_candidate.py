@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from statistics import median
@@ -33,7 +34,12 @@ def _load_module(path: Path, name: str):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Cannot load {name} from {path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(name, None)
+        raise
     return module
 
 
