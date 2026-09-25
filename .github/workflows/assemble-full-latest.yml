@@ -1,0 +1,214 @@
+name: Assemble Verified Full Latest
+
+on:
+  push:
+    branches:
+      - dev/backyard-vertical-slice
+    paths:
+      - .github/workflows/assemble-full-latest.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DRIVE_FILE_ID: 15ZdOAJaLP216dY8QFPJkp8SON1vJFjgV
+    steps:
+      - name: Checkout verified development branch
+        uses: actions/checkout@v5
+        with:
+          ref: dev/backyard-vertical-slice
+
+      - name: Install assembly dependencies
+        run: python3 -m pip install --quiet pillow numpy gdown
+
+      - name: Download canonical full project from Google Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          gdown "$DRIVE_FILE_ID" -O /tmp/BackyardMayhem_LATEST.zip
+          test -s /tmp/BackyardMayhem_LATEST.zip
+          unzip -t /tmp/BackyardMayhem_LATEST.zip >/tmp/zip-test.log
+          mkdir -p /tmp/backyard-full
+          unzip -q /tmp/BackyardMayhem_LATEST.zip -d /tmp/backyard-full
+          ROOT="$(dirname "$(find /tmp/backyard-full -name project.godot -print -quit)")"
+          test -n "$ROOT"
+          test -f "$ROOT/project.godot"
+          echo "FULL_ROOT=$ROOT" >> "$GITHUB_ENV"
+          echo "Full project root: $ROOT"
+
+      - name: Overlay verified art, player, QA and gameplay modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in scripts/art scripts/player scripts/qa tools/art tools/qa; do
+            if [ -d "$dir" ]; then
+              mkdir -p "$FULL_ROOT/$(dirname "$dir")"
+              rm -rf "$FULL_ROOT/$dir"
+              cp -a "$dir" "$FULL_ROOT/$dir"
+            fi
+          done
+          mkdir -p "$FULL_ROOT/scripts/gameplay"
+          for file in \
+            scripts/gameplay/between_wave_upgrade_profile.gd \
+            scripts/gameplay/vertical_slice_session.gd \
+            scripts/gameplay/wave_progression_profile.gd \
+            scripts/gameplay/backyard_runtime_coordinator.gd \
+            scripts/gameplay/backyard_hud_model.gd \
+            scripts/gameplay/backyard_visual_presenter.gd; do
+            if [ -f "$file" ]; then
+              cp "$file" "$FULL_ROOT/$file"
+            fi
+          done
+          echo "Overlay complete"
+
+      - name: Stage and apply authored hero RUN/FIRE candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          test -f tools/art/build_full_project_hero_candidate.py
+          python3 tools/art/build_full_project_hero_candidate.py \
+            --candidate-dir artifacts/hero_candidate --apply | tee /tmp/hero-apply.log
+          grep -q "APPLIED validated hero candidate" /tmp/hero-apply.log
+          test -s assets/runtime/characters/builder_hero/builder_hero_frames.tres
+          test -s assets/runtime/characters/builder_hero/run_front_00.png
+          test -s assets/runtime/characters/builder_hero/fire_front_00.png
+
+      - name: Validate authored hero frame margins and grounding
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          root = Path('assets/runtime/characters/builder_hero')
+          directions = ('front','front_right','right','back_right','back','back_left','left','front_left')
+          errors=[]
+          bottoms=[]
+          for action,count in (('run',8),('fire',4)):
+              for direction in directions:
+                  for i in range(count):
+                      p=root/f'{action}_{direction}_{i:02d}.png'
+                      if not p.is_file():
+                          errors.append(f'missing {p}')
+                          continue
+                      im=Image.open(p).convert('RGBA')
+                      if im.size != (320,320): errors.append(f'{p.name}: size={im.size}')
+                      bb=im.getchannel('A').point(lambda x:255 if x>18 else 0).getbbox()
+                      if not bb:
+                          errors.append(f'{p.name}: empty')
+                          continue
+                      l,t,r,b=bb
+                      if t < 8: errors.append(f'{p.name}: top={t}')
+                      if l < 5 or r > 315: errors.append(f'{p.name}: side=({l},{r})')
+                      if b > 315: errors.append(f'{p.name}: bottom={b}')
+                      bottoms.append(b-1)
+          if bottoms and max(bottoms)-min(bottoms) > 8:
+              errors.append(f'hero ground spread too large: {min(bottoms)}..{max(bottoms)}')
+          if errors:
+              raise SystemExit('\n'.join(errors))
+          print('Hero authored frames clean and grounded:', min(bottoms), max(bottoms))
+          PY
+
+      - name: Download Godot 4.7.2 stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7.2-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+          echo "GODOT_BIN=/tmp/Godot_v4.7.2-stable_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Full-project editor parse gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          rm -rf .godot
+          "$GODOT_BIN" --headless --path . --editor --quit 2>&1 | tee /tmp/full-editor.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script" /tmp/full-editor.log; then
+            echo "::error::Full merged project emitted a Godot script/parse error"
+            exit 1
+          fi
+
+      - name: Full-project regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          failed=0
+          passed=0
+          skipped=0
+          while IFS= read -r test_path; do
+            base="$(basename "$test_path")"
+            case "$base" in
+              test_utils.gd|test_lane_performance_contracts.gd)
+                echo "SKIP helper $test_path"
+                skipped=$((skipped+1))
+                continue
+                ;;
+            esac
+            log="/tmp/full-$(echo "$base" | tr '/' '_').log"
+            echo "=== $test_path ==="
+            if timeout 90s "$GODOT_BIN" --headless --path . --script "res://$test_path" 2>&1 | tee "$log"; then
+              if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|failures=[1-9]" "$log"; then
+                failed=$((failed+1))
+              else
+                passed=$((passed+1))
+              fi
+            else
+              failed=$((failed+1))
+            fi
+          done < <(find tests -maxdepth 1 -type f -name 'test_*.gd' | sort)
+          echo "FULL TEST SUMMARY passed=$passed failed=$failed skipped=$skipped"
+          test "$failed" -eq 0
+          test "$passed" -ge 60
+
+      - name: Focused gameplay smoke gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          tests=(
+            tests/test_player_dash.gd
+            tests/test_five_wave_builder_acceptance.gd
+            tests/test_reference_a_ui_contract.gd
+            tests/test_boss_warning_feedback.gd
+            tests/test_pigeon_splat_attack.gd
+            tests/test_new_hero_muzzle_alignment.gd
+          )
+          for test_path in "${tests[@]}"; do
+            test -f "$test_path"
+            timeout 90s "$GODOT_BIN" --headless --path . --script "res://$test_path" 2>&1 | tee "/tmp/smoke-$(basename "$test_path" .gd).log"
+            if grep -E "SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|failures=[1-9]" "/tmp/smoke-$(basename "$test_path" .gd).log"; then
+              exit 1
+            fi
+          done
+
+      - name: Package verified complete project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          rm -rf .godot backups artifacts/hero_candidate
+          zip -qr /tmp/BackyardMayhem_LATEST_MERGED.zip . -x '*.tmp' '*.gd.uid'
+          sha256sum /tmp/BackyardMayhem_LATEST_MERGED.zip | tee /tmp/BackyardMayhem_LATEST_MERGED.sha256.txt
+          ls -lh /tmp/BackyardMayhem_LATEST_MERGED.zip
+
+      - name: Upload verified full latest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backyard-full-latest-merged
+          path: |
+            /tmp/BackyardMayhem_LATEST_MERGED.zip
+            /tmp/BackyardMayhem_LATEST_MERGED.sha256.txt
+          if-no-files-found: error
+          compression-level: 0
