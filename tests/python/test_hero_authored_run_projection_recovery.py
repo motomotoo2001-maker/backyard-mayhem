@@ -80,7 +80,11 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
                 self.assertEqual((320, 320), frame.size)
                 bbox = frame.getchannel("A").getbbox()
                 self.assertIsNotNone(bbox)
-                self.assertEqual(306, bbox[3])
+                self.assertEqual(
+                    307,
+                    bbox[3],
+                    "ground_y=306 means last visible pixel is y=306; Pillow bbox bottom is exclusive",
+                )
                 self.assertGreaterEqual(bbox[0], 6)
                 self.assertLessEqual(bbox[2], 314)
                 red_positions = []
