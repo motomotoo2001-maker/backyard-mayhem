@@ -56,6 +56,17 @@ class FullProjectHeroCandidateCleanlinessTest(unittest.TestCase):
         marker = "_validate_authored_frame_cleanliness(frame, name, ground_y)"
         self.assertGreaterEqual(source.count(marker), 2)
 
+    def test_candidate_cleanup_runs_before_validation(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        cleanup_marker = "cleanup.clean_candidate(candidate_dir, ground_y=builder.ANCHOR[1])"
+        validate_marker = "_validate_candidate_frames("
+        self.assertIn(cleanup_marker, source)
+        cleanup_pos = source.find(cleanup_marker)
+        main_pos = source.find("def main()")
+        validate_pos = source.find(validate_marker, main_pos)
+        self.assertGreater(cleanup_pos, main_pos)
+        self.assertGreater(validate_pos, cleanup_pos)
+
 
 if __name__ == "__main__":
     unittest.main()
