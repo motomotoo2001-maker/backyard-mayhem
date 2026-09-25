@@ -110,11 +110,18 @@ def _kept_components(components: list[Component]) -> tuple[Component, list[Compo
     nearby_x = max(34, int(main.width * 0.55))
     nearby_y = max(24, int(main.height * 0.16))
     significant = max(28, int(main.pixels * 0.012))
+    lower_slack = 2
 
     for component in components[1:]:
         dx, dy = _bbox_gap(main.bbox, component.bbox)
+        # Detached pieces below the main feet are crop contamination even when they
+        # are spatially close in X/Y. Keeping them would constrain the frame shift
+        # and make the actual hero float above the shared ground line.
+        if component.bbox[3] > main.bbox[3] + lower_slack:
+            continue
         # Preserve detached hose/weapon pieces only when they remain spatially tied
-        # to the body. Distant labels, neighbouring limbs and sheet debris disappear.
+        # to the body and do not extend below its feet. Distant labels, neighbouring
+        # limbs and sheet debris disappear.
         if dx <= nearby_x and dy <= nearby_y:
             kept.append(component)
         elif component.pixels >= significant:
@@ -136,7 +143,6 @@ def clean_frame(
 
     components = _alpha_components(frame)
     main, kept = _kept_components(components)
-    kept_ids = {point for component in kept for point in component.points}
 
     data = frame.load()
     removed_pixels = 0
