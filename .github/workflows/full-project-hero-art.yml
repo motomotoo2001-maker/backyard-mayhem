@@ -11,6 +11,7 @@ on:
       - tools/art/hero_authored_run_recovery.py
       - tools/art/hero_authored_run_recovery_v2.py
       - tools/art/hero_authored_fire_pipeline.py
+      - tools/art/hero_candidate_cleanup.py
       - tools/art/build_full_project_hero_candidate.py
       - tests/python/test_authored_run_extraction_geometry.py
       - tests/python/test_hero_authored_run_pipeline.py
@@ -67,6 +68,7 @@ jobs:
           cp tools/art/hero_authored_run_recovery.py "$FULL_ROOT/tools/art/hero_authored_run_recovery.py"
           cp tools/art/hero_authored_run_recovery_v2.py "$FULL_ROOT/tools/art/hero_authored_run_recovery_v2.py"
           cp tools/art/hero_authored_fire_pipeline.py "$FULL_ROOT/tools/art/hero_authored_fire_pipeline.py"
+          cp tools/art/hero_candidate_cleanup.py "$FULL_ROOT/tools/art/hero_candidate_cleanup.py"
           cp tools/art/build_full_project_hero_candidate.py "$FULL_ROOT/tools/art/build_full_project_hero_candidate.py"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_new_8dir_movement_sheet.png"
           test -f "$FULL_ROOT/assets/source/user_pack/hero_clean_8dir_reference.png"
