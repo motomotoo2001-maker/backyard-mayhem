@@ -1,0 +1,144 @@
+name: Full Project Grounding Diagnostics
+
+on:
+  push:
+    branches:
+      - dev/backyard-vertical-slice
+    paths:
+      - .github/workflows/full-project-grounding-diagnostics.yml
+      - tools/art/build_full_project_hero_candidate.py
+  workflow_dispatch:
+
+jobs:
+  diagnose-grounding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DRIVE_FILE_ID: 15ZdOAJaLP216dY8QFPJkp8SON1vJFjgV
+    steps:
+      - name: Checkout QA/art branch
+        uses: actions/checkout@v5
+
+      - name: Install art pipeline packages
+        run: python3 -m pip install --quiet pillow numpy gdown
+
+      - name: Download canonical full project from Google Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          gdown "$DRIVE_FILE_ID" -O /tmp/BackyardMayhem_LATEST.zip
+          test -s /tmp/BackyardMayhem_LATEST.zip
+          rm -rf /tmp/backyard-full
+          mkdir -p /tmp/backyard-full
+          unzip -q /tmp/BackyardMayhem_LATEST.zip -d /tmp/backyard-full
+          ROOT="$(dirname "$(find /tmp/backyard-full -name project.godot -print -quit)")"
+          test -n "$ROOT"
+          test -f "$ROOT/project.godot"
+          echo "FULL_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Overlay current hero art pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$FULL_ROOT/tools/art"
+          for file in \
+            build_new_reference_hero.py \
+            hero_authored_run_pipeline.py \
+            hero_authored_run_resilient.py \
+            hero_authored_run_recovery.py \
+            hero_authored_run_recovery_v2.py \
+            hero_authored_fire_pipeline.py \
+            build_full_project_hero_candidate.py; do
+            cp "tools/art/$file" "$FULL_ROOT/tools/art/$file"
+          done
+
+      - name: Stage and apply the same full-project candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$FULL_ROOT"
+          python3 tools/art/build_full_project_hero_candidate.py --candidate-dir artifacts/hero_candidate
+          python3 tools/art/build_full_project_hero_candidate.py --candidate-dir artifacts/hero_candidate --apply
+
+      - name: Capture grounding source diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '=== player.tscn grounding nodes ==='
+            grep -n -A8 -B3 'name="Shadow"\|name="AnimatedSprite2D"\|name="CollisionShape2D"' "$FULL_ROOT/scenes/player/player.tscn" || true
+            echo
+            echo '=== chair_barricade.tscn grounding nodes ==='
+            grep -n -A10 -B3 'name="Shadow"\|name="Sprite2D"\|name="CollisionShape2D"' "$FULL_ROOT/scenes/defenses/chair_barricade.tscn" || true
+            echo
+            echo '=== build_controller preview logic ==='
+            grep -n -A18 -B8 '_preview_visual_offset_for\|build_position\|_ghost.global_position' "$FULL_ROOT/scripts/build/build_controller.gd" || true
+            echo
+            echo '=== hero alpha bounds ==='
+            python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import os
+          root = Path(os.environ['FULL_ROOT']) / 'assets/runtime/characters/builder_hero'
+          for prefix, count in [('idle',4), ('run',8), ('fire',4)]:
+              for direction in ['front','front_right','right','back_right','back','back_left','left','front_left']:
+                  bottoms=[]
+                  for index in range(count):
+                      path=root/f'{prefix}_{direction}_{index:02d}.png'
+                      if not path.exists():
+                          continue
+                      with Image.open(path) as source:
+                          bbox=source.convert('RGBA').getchannel('A').point(lambda p:255 if p>16 else 0).getbbox()
+                      if bbox:
+                          bottoms.append(bbox[3])
+                  if bottoms:
+                      print(prefix, direction, 'bottoms=', bottoms, 'drift=', max(bottoms)-min(bottoms))
+          PY
+          } > /tmp/grounding-diagnostics.txt
+          cat /tmp/grounding-diagnostics.txt
+
+      - name: Download Godot 4.7.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp
+          wget -q https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q -o Godot_v4.7.2-stable_linux.x86_64.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+          echo "GODOT_BIN=/tmp/Godot_v4.7.2-stable_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Run editor without early abort
+        shell: bash
+        run: |
+          set +e
+          cd "$FULL_ROOT"
+          "$GODOT_BIN" --headless --path . --editor --quit > /tmp/full-candidate-editor.log 2>&1
+          code=$?
+          echo "EDITOR_EXIT=$code" >> "$GITHUB_ENV"
+          echo "Godot editor exit: $code"
+          grep -n -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script|Error at' /tmp/full-candidate-editor.log || true
+          exit 0
+
+      - name: Upload grounding diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-project-grounding-diagnostics
+          path: |
+            /tmp/grounding-diagnostics.txt
+            /tmp/full-candidate-editor.log
+            ${{ env.FULL_ROOT }}/scenes/player/player.tscn
+            ${{ env.FULL_ROOT }}/scenes/defenses/chair_barricade.tscn
+            ${{ env.FULL_ROOT }}/scripts/build/build_controller.gd
+            ${{ env.FULL_ROOT }}/artifacts/hero_candidate/authored-run-contact-sheet.png
+            ${{ env.FULL_ROOT }}/artifacts/hero_candidate/authored-fire-contact-sheet.png
+          if-no-files-found: warn
+
+      - name: Fail if the full project still has a parse error
+        shell: bash
+        run: |
+          if grep -E 'SCRIPT ERROR:|Parse Error:|ERROR: Failed to load script' /tmp/full-candidate-editor.log; then
+            echo '::error::Full-project grounding candidate still has a Godot parse error; inspect the uploaded diagnostics artifact.'
+            exit 1
+          fi
+          test "${EDITOR_EXIT:-1}" -eq 0
