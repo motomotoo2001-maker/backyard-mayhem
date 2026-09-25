@@ -131,6 +131,34 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
                 "detached upper island must be removed before recovered RUN is published",
             )
 
+    def test_normalize_ground_removes_low_alpha_fringe_below_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "run_back_00.png"
+            image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(image)
+            # Main body already has its real feet on the shared floor pixel.
+            draw.rounded_rectangle((112, 82, 210, 288), radius=12, fill=(125, 82, 178, 255))
+            draw.rectangle((124, 270, 151, 306), fill=(125, 82, 178, 255))
+            draw.rectangle((174, 270, 200, 306), fill=(125, 82, 178, 255))
+            # Nearly transparent antialias residue underneath the feet. It is below
+            # the alpha threshold used for body connected-components but still makes
+            # Pillow's raw alpha bbox extend to y=309.
+            draw.rectangle((136, 307, 188, 309), fill=(125, 82, 178, 12))
+            image.save(path)
+
+            recovery._normalize_ground(path, 320, 306)
+
+            with Image.open(path) as source:
+                cleaned = source.convert("RGBA")
+            raw_bbox = cleaned.getchannel("A").getbbox()
+            self.assertIsNotNone(raw_bbox)
+            self.assertEqual(307, raw_bbox[3])
+            self.assertEqual(
+                0,
+                cleaned.crop((0, 307, 320, 320)).getchannel("A").getextrema()[1],
+                "sub-threshold alpha fringe below the shared floor must not survive runtime publication",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
