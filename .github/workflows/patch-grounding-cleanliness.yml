@@ -1,4 +1,5 @@
 name: Patch Grounding Cleanliness Integration
+# retrigger 2026-09-25: apply authored cleanup validator to the full-project candidate builder
 
 on:
   push:
