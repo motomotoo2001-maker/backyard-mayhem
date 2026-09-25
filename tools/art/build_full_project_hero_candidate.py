@@ -24,6 +24,7 @@ PROJECT_ROOT = HERE.parents[1]
 BUILDER_PATH = HERE / "build_new_reference_hero.py"
 PIPELINE_PATH = HERE / "hero_authored_run_pipeline.py"
 RECOVERY_PATH = HERE / "hero_authored_run_recovery_v2.py"
+CLEANUP_PATH = HERE / "hero_candidate_cleanup.py"
 DEFAULT_CANDIDATE_DIR = PROJECT_ROOT / "artifacts" / "hero_candidate"
 
 
@@ -146,6 +147,38 @@ def _authored_run_adapter(
         return _load_frames_from_paths(built, directions)
 
 
+
+def _validate_authored_frame_cleanliness(
+    frame: Image.Image,
+    name: str,
+    ground_y: int,
+) -> None:
+    """Reject floating body anchors and distant alpha debris in authored hero frames."""
+    cleanup = _load_module(CLEANUP_PATH, "backyard_hero_candidate_cleanup_validator")
+    components = cleanup._alpha_components(frame.convert("RGBA"))
+    if not components:
+        raise RuntimeError(f"{name}: empty authored frame")
+
+    main = components[0]
+    body_bottom = main.bbox[3] - 1
+    if abs(body_bottom - int(ground_y)) > 3:
+        raise RuntimeError(
+            f"{name}: body ground anchor drift {body_bottom - int(ground_y):+d}px; "
+            f"expected {int(ground_y)}±3"
+        )
+
+    max_dx = max(42, int(main.width * 0.60))
+    max_dy = max(28, int(main.height * 0.18))
+    significant = max(36, int(main.pixels * 0.018))
+    for component in components[1:]:
+        if component.pixels < significant:
+            continue
+        dx, dy = cleanup._bbox_gap(main.bbox, component.bbox)
+        if dx > max_dx or dy > max_dy:
+            raise RuntimeError(
+                f"{name}: detached alpha island area={component.pixels} gap=({dx},{dy})"
+            )
+
 def _validate_authored_fire_frames(
     frames_dir: Path,
     generated,
@@ -170,6 +203,7 @@ def _validate_authored_fire_frames(
                 raise RuntimeError(f"Missing FIRE candidate frame: {name}")
             with Image.open(path) as source:
                 frame = source.convert("RGBA")
+            _validate_authored_frame_cleanliness(frame, name, ground_y)
             if frame.size != expected_size:
                 raise RuntimeError(f"{name}: expected canvas {expected_size}, got {frame.size}")
             bbox = frame.getchannel("A").getbbox()
@@ -229,6 +263,7 @@ def _validate_candidate_frames(
         for name in run_names:
             with Image.open(frames_dir / name) as source:
                 frame = source.convert("RGBA")
+            _validate_authored_frame_cleanliness(frame, name, ground_y)
             bbox = frame.getchannel("A").getbbox()
             assert bbox is not None
             left, top, right, bottom = bbox
