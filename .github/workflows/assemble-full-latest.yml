@@ -6,6 +6,12 @@ on:
       - dev/backyard-vertical-slice
     paths:
       - .github/workflows/assemble-full-latest.yml
+      - scripts/gameplay/**
+      - scripts/player/**
+      - scripts/art/**
+      - scripts/qa/**
+      - tools/art/**
+      - tools/qa/**
   workflow_dispatch:
 
 permissions:
@@ -41,30 +47,21 @@ jobs:
           echo "FULL_ROOT=$ROOT" >> "$GITHUB_ENV"
           echo "Full project root: $ROOT"
 
-      - name: Overlay verified art, player, QA and gameplay modules
+      - name: Overlay all verified runtime, gameplay, player and QA modules
         shell: bash
         run: |
           set -euo pipefail
-          for dir in scripts/art scripts/player scripts/qa tools/art tools/qa; do
+          # Replace self-contained verified module trees. These directories are code-only
+          # overlays and intentionally do not replace the full project's production scenes/assets.
+          for dir in scripts/art scripts/gameplay scripts/player scripts/qa tools/art tools/qa; do
             if [ -d "$dir" ]; then
               mkdir -p "$FULL_ROOT/$(dirname "$dir")"
               rm -rf "$FULL_ROOT/$dir"
               cp -a "$dir" "$FULL_ROOT/$dir"
             fi
           done
-          mkdir -p "$FULL_ROOT/scripts/gameplay"
-          for file in \
-            scripts/gameplay/between_wave_upgrade_profile.gd \
-            scripts/gameplay/vertical_slice_session.gd \
-            scripts/gameplay/wave_progression_profile.gd \
-            scripts/gameplay/backyard_runtime_coordinator.gd \
-            scripts/gameplay/backyard_hud_model.gd \
-            scripts/gameplay/backyard_visual_presenter.gd; do
-            if [ -f "$file" ]; then
-              cp "$file" "$FULL_ROOT/$file"
-            fi
-          done
-          echo "Overlay complete"
+          echo "Verified module overlay complete"
+          echo "Gameplay modules copied: $(find "$FULL_ROOT/scripts/gameplay" -maxdepth 1 -type f -name '*.gd' | wc -l)"
 
       - name: Stage and apply authored hero RUN/FIRE candidate
         shell: bash
