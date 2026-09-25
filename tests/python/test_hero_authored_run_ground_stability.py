@@ -96,7 +96,6 @@ class AuthoredRunGroundStabilityTest(unittest.TestCase):
 
         cleaned = module._strip_upper_presentation_band(image)
 
-        # The connected shoulder bar and blower must survive untouched.
         self.assertGreater(cleaned.getpixel((90, 112))[3], 0)
         self.assertGreater(cleaned.getpixel((235, 112))[3], 0)
         self.assertGreater(cleaned.getpixel((245, 112))[3], 0)
@@ -109,7 +108,6 @@ class AuthoredRunGroundStabilityTest(unittest.TestCase):
         image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         draw.rounded_rectangle((122, 92, 202, 292), radius=12, fill=(133, 84, 176, 255))
-        # Wide shallow label with a real transparent gap above the body.
         draw.rectangle((100, 58, 224, 72), fill=(240, 230, 215, 255))
 
         cleaned = module._strip_upper_presentation_band(image)
@@ -122,16 +120,33 @@ class AuthoredRunGroundStabilityTest(unittest.TestCase):
         image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         draw.rounded_rectangle((122, 92, 202, 292), radius=12, fill=(133, 84, 176, 255))
-        # A wide label is almost detached, but a one-pixel antialias/source-sheet bridge
-        # connects it to the character. This mirrors joined-row contamination: preserving
-        # it would keep RUN text in the runtime frame even though the connection is too
-        # narrow to be believable hero geometry.
         draw.rectangle((96, 58, 228, 72), fill=(240, 230, 215, 255))
         draw.rectangle((159, 73, 160, 91), fill=(240, 230, 215, 255))
 
         cleaned = module._strip_upper_presentation_band(image)
 
         self.assertEqual(0, cleaned.getpixel((110, 64))[3])
+        self.assertEqual(0, cleaned.getpixel((160, 80))[3])
+        self.assertGreater(cleaned.getpixel((160, 110))[3], 0)
+
+    def test_upper_presentation_cleanup_removes_split_label_with_center_gap(self):
+        module = _load_module()
+        image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((122, 92, 202, 292), radius=12, fill=(133, 84, 176, 255))
+        # Joined-row recovery can project one presentation label into two broad
+        # islands separated by a central hole. The old longest-run detector saw
+        # each half as too short even though together they span almost the whole
+        # character width. Add a tiny source-sheet bridge so this also exercises
+        # the contact-width rule used for real contaminated frames.
+        draw.rectangle((92, 58, 152, 72), fill=(240, 230, 215, 255))
+        draw.rectangle((169, 58, 231, 72), fill=(240, 230, 215, 255))
+        draw.rectangle((159, 73, 160, 91), fill=(240, 230, 215, 255))
+
+        cleaned = module._strip_upper_presentation_band(image)
+
+        self.assertEqual(0, cleaned.getpixel((110, 64))[3])
+        self.assertEqual(0, cleaned.getpixel((200, 64))[3])
         self.assertEqual(0, cleaned.getpixel((160, 80))[3])
         self.assertGreater(cleaned.getpixel((160, 110))[3], 0)
 
