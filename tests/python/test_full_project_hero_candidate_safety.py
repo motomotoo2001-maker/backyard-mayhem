@@ -93,7 +93,7 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
             for index in range(8):
                 name = f"run_front_{index:02d}.png"
                 run_names.append(name)
-                _write_frame(frames_dir / name, (20, 20, 299, 299), marker_x=index * 2)
+                _write_frame(frames_dir / name, (20, 20, 299, 305), marker_x=index * 2)
 
             fire_names = _write_valid_fire_sequence(frames_dir, "front")
 
@@ -117,7 +117,7 @@ class FullProjectHeroCandidateSafetyTest(unittest.TestCase):
             for index in range(8):
                 name = f"run_front_{index:02d}.png"
                 run_names.append(name)
-                box = (0, 20, 299, 299) if index == 0 else (20, 20, 299, 299)
+                box = (0, 20, 299, 305) if index == 0 else (20, 20, 299, 305)
                 _write_frame(frames_dir / name, box, marker_x=index * 2)
             fire_names = _write_valid_fire_sequence(frames_dir, "front")
             (frames_dir / "builder_hero_frames.tres").write_text("[gd_resource type=\"SpriteFrames\"]\n", encoding="utf-8")
