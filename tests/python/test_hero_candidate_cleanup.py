@@ -58,6 +58,25 @@ class HeroCandidateCleanupTest(unittest.TestCase):
         # No detached alpha may remain below the shared ground pixel.
         self.assertEqual(0, cleaned.crop((0, 307, 320, 320)).getchannel("A").getextrema()[1])
 
+    def test_nearby_wide_shallow_label_above_head_is_removed(self):
+        cleanup = _load_cleanup()
+        image = _base_frame()
+        draw = ImageDraw.Draw(image)
+        # Mirrors the real run_back_00 failure: a presentation label sits only a
+        # few pixels above the body, overlaps it horizontally, and is therefore
+        # too close for a plain proximity filter to distinguish from a weapon.
+        # Its wide + shallow geometry is presentation chrome, not anatomy.
+        draw.rectangle((114, 46, 211, 70), fill=(245, 235, 220, 255))
+
+        cleaned, stats = cleanup.clean_frame(image, ground_y=306, safe_margin=8)
+        bbox = cleaned.getchannel("A").point(lambda p: 255 if p > 18 else 0).getbbox()
+        self.assertIsNotNone(bbox)
+        self.assertEqual(307, bbox[3])
+        self.assertGreater(stats["removed_pixels"], 0)
+        # The detached upper label must be gone even though it is only 3 px above
+        # the body and horizontally overlaps it.
+        self.assertEqual(0, cleaned.crop((100, 40, 225, 73)).getchannel("A").getextrema()[1])
+
 
 if __name__ == "__main__":
     unittest.main()
