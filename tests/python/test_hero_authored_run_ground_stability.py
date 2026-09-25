@@ -117,6 +117,24 @@ class AuthoredRunGroundStabilityTest(unittest.TestCase):
         self.assertEqual(0, cleaned.getpixel((110, 64))[3])
         self.assertGreater(cleaned.getpixel((160, 110))[3], 0)
 
+    def test_upper_presentation_cleanup_removes_label_with_tiny_bridge(self):
+        module = _load_module()
+        image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((122, 92, 202, 292), radius=12, fill=(133, 84, 176, 255))
+        # A wide label is almost detached, but a one-pixel antialias/source-sheet bridge
+        # connects it to the character. This mirrors joined-row contamination: preserving
+        # it would keep RUN text in the runtime frame even though the connection is too
+        # narrow to be believable hero geometry.
+        draw.rectangle((96, 58, 228, 72), fill=(240, 230, 215, 255))
+        draw.rectangle((159, 73, 160, 91), fill=(240, 230, 215, 255))
+
+        cleaned = module._strip_upper_presentation_band(image)
+
+        self.assertEqual(0, cleaned.getpixel((110, 64))[3])
+        self.assertEqual(0, cleaned.getpixel((160, 80))[3])
+        self.assertGreater(cleaned.getpixel((160, 110))[3], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
