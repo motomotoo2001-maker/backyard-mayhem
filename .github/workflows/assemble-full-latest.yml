@@ -51,17 +51,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Replace self-contained verified module trees. These directories are code-only
-          # overlays and intentionally do not replace the full project's production scenes/assets.
+          # Merge verified module trees additively. Never delete production directories:
+          # the canonical full project contains production-only scripts/scenes that are not
+          # mirrored in the QA/dev branch, and removing them breaks real scene dependencies.
           for dir in scripts/art scripts/gameplay scripts/player scripts/qa tools/art tools/qa; do
             if [ -d "$dir" ]; then
-              mkdir -p "$FULL_ROOT/$(dirname "$dir")"
-              rm -rf "$FULL_ROOT/$dir"
-              cp -a "$dir" "$FULL_ROOT/$dir"
+              mkdir -p "$FULL_ROOT/$dir"
+              cp -a "$dir/." "$FULL_ROOT/$dir/"
             fi
           done
-          echo "Verified module overlay complete"
-          echo "Gameplay modules copied: $(find "$FULL_ROOT/scripts/gameplay" -maxdepth 1 -type f -name '*.gd' | wc -l)"
+          echo "Verified additive module overlay complete"
+          echo "Gameplay modules present: $(find "$FULL_ROOT/scripts/gameplay" -maxdepth 1 -type f -name '*.gd' | wc -l)"
+          echo "Player modules present: $(find "$FULL_ROOT/scripts/player" -maxdepth 1 -type f -name '*.gd' | wc -l)"
 
       - name: Stage and apply authored hero RUN/FIRE candidate
         shell: bash
