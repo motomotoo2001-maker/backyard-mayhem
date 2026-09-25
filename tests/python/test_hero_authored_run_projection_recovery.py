@@ -101,6 +101,32 @@ class HeroAuthoredRunProjectionRecoveryTest(unittest.TestCase):
                     f"label contamination in {path.name}: red_bbox={red_bbox}, alpha_bbox={bbox}",
                 )
 
+    def test_normalize_ground_removes_large_vertical_detached_island(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "run_front_00.png"
+            image = Image.new("RGBA", (320, 320), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(image)
+            # Main body, already close to the desired floor line.
+            draw.rounded_rectangle((118, 92, 206, 279), radius=12, fill=(125, 82, 178, 255))
+            draw.rectangle((126, 265, 148, 285), fill=(125, 82, 178, 255))
+            draw.rectangle((174, 265, 198, 285), fill=(125, 82, 178, 255))
+            # Large neighbour fragment: x-overlaps the body but is vertically detached by >40 px.
+            draw.rectangle((132, 20, 191, 48), fill=(235, 80, 80, 255))
+            image.save(path)
+
+            recovery._normalize_ground(path, 320, 306)
+
+            with Image.open(path) as source:
+                cleaned = source.convert("RGBA")
+            bbox = cleaned.getchannel("A").point(lambda p: 255 if p > 16 else 0).getbbox()
+            self.assertIsNotNone(bbox)
+            self.assertEqual(307, bbox[3])
+            self.assertEqual(
+                0,
+                cleaned.crop((0, 0, 320, 100)).getchannel("A").getextrema()[1],
+                "detached upper island must be removed before recovered RUN is published",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
