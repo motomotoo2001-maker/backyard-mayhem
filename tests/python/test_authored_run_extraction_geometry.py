@@ -95,3 +95,5 @@ class AuthoredRunExtractionGeometryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# CI rebuild marker: assemble the latest verified full project after all current art/grounding fixes.
