@@ -29,6 +29,24 @@ jobs:
         with:
           ref: dev/backyard-vertical-slice
 
+      - name: Publish active build run id
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > LATEST_BUILD_STATUS.md <<EOF
+          # Latest Verified Full Build
+
+          - Workflow run ID: ${GITHUB_RUN_ID}
+          - Source commit: ${GITHUB_SHA}
+          - Artifact: backyard-full-latest-merged
+          - Status: RUNNING
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LATEST_BUILD_STATUS.md
+          git commit -m "chore: record active full build ${GITHUB_RUN_ID}"
+          git push origin HEAD:dev/backyard-vertical-slice
+
       - name: Install assembly dependencies
         run: python3 -m pip install --quiet pillow numpy gdown
 
@@ -224,12 +242,6 @@ jobs:
           - Godot gate: 4.7.2 stable
           - Status: PASS
           EOF
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add LATEST_BUILD_STATUS.md
-          if git diff --cached --quiet; then
-            echo "Build status unchanged"
-          else
-            git commit -m "chore: record latest verified full build"
-            git push origin HEAD:dev/backyard-vertical-slice
-          fi
+          git commit -m "chore: record latest verified full build ${GITHUB_RUN_ID}"
+          git push origin HEAD:dev/backyard-vertical-slice
