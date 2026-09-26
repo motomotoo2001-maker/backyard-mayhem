@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   assemble:
@@ -51,9 +51,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Merge verified module trees additively. Never delete production directories:
-          # the canonical full project contains production-only scripts/scenes that are not
-          # mirrored in the QA/dev branch, and removing them breaks real scene dependencies.
           for dir in scripts/art scripts/gameplay scripts/player scripts/qa tools/art tools/qa; do
             if [ -d "$dir" ]; then
               mkdir -p "$FULL_ROOT/$dir"
@@ -210,3 +207,29 @@ jobs:
             /tmp/BackyardMayhem_LATEST_MERGED.sha256.txt
           if-no-files-found: error
           compression-level: 0
+
+      - name: Publish latest verified build status
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_SHA="$(cut -d' ' -f1 /tmp/BackyardMayhem_LATEST_MERGED.sha256.txt)"
+          cat > LATEST_BUILD_STATUS.md <<EOF
+          # Latest Verified Full Build
+
+          - Workflow run ID: ${GITHUB_RUN_ID}
+          - Source commit: ${GITHUB_SHA}
+          - Artifact: backyard-full-latest-merged
+          - Archive: BackyardMayhem_LATEST_MERGED.zip
+          - SHA-256: ${ARCHIVE_SHA}
+          - Godot gate: 4.7.2 stable
+          - Status: PASS
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LATEST_BUILD_STATUS.md
+          if git diff --cached --quiet; then
+            echo "Build status unchanged"
+          else
+            git commit -m "chore: record latest verified full build"
+            git push origin HEAD:dev/backyard-vertical-slice
+          fi
